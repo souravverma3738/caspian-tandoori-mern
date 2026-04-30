@@ -19,6 +19,7 @@ const userSchema = new mongoose.Schema(
     phone: { type: String, default: "" },
     password: { type: String },
     provider: { type: String, enum: ["email", "google"], default: "email" },
+    role: { type: String, enum: ["customer", "admin"], default: "customer" },
     addresses: [addressSchema],
     loyaltyPoints: { type: Number, default: 0 }
   },

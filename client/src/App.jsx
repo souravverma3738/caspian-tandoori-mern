@@ -1,5 +1,5 @@
-import React, { useMemo, useState } from "react";
-import { authApi, setSession, userApi } from "./api";
+import React, { useEffect, useMemo, useState } from "react";
+import { authApi, setSession, userApi, adminApi } from "./api";
 import { orderApi } from "./api";
 import { signInWithPopup } from "firebase/auth";
 import { firebaseAuth, googleProvider } from "./firebase";
@@ -63,7 +63,7 @@ export default function CaspianTakeawayWebsite() {
 
   return (
     <div className="min-h-screen bg-[#080808] text-white selection:bg-orange-500/40">
-      <Header page={page} go={go} count={count} user={user} setAuthMode={setAuthMode} setCartOpen={setCartOpen} setMobileOpen={setMobileOpen} />
+      <Header page={page} go={go} count={count} user={user} setAuthMode={setAuthMode} setCartOpen={setCartOpen} setMobileOpen={setMobileOpen}/>
       {mobileOpen && <MobileNav go={go} setMobileOpen={setMobileOpen} />}
       <main>
         {page === "home" && <HomePage go={go} />}
@@ -72,8 +72,9 @@ export default function CaspianTakeawayWebsite() {
         {page === "contact" && <ContactPage contactSent={contactSent} setContactSent={setContactSent} />}
         {page === "auth" && <AuthPage authMode={authMode} setAuthMode={setAuthMode} setUser={setUser} setAddresses={setAddresses} go={go} />}
         {page === "profile" && <ProfilePage user={user} setUser={setUser} addresses={addresses} setAddresses={setAddresses} go={go} setAuthMode={setAuthMode} />}
+        {page === "admin" && <AdminDashboard user={user} go={go} />}
       </main>
-      <Footer go={go} />
+      <Footer go={go} user={user} />
       {cartOpen && <CartDrawer user={user} go={go} cart={cart} setCart={setCart} setCartOpen={setCartOpen} total={total} changeQty={changeQty} orderType={orderType} setOrderType={setOrderType} customer={customer} setCustomer={setCustomer} placed={placed} setPlaced={setPlaced} />}
       <style>{`
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=Playfair+Display:wght@600;700;800;900&display=swap');
@@ -91,7 +92,17 @@ h1,h2,h3,h4,h5,h6,.font-serif { font-family: 'Playfair Display', serif; }
 function Header({ page, go, count, user, setAuthMode, setCartOpen, setMobileOpen }) {
   const links = [["Home", "home"], ["Menu", "menu"], ["About", "about"], ["Contact", "contact"]];
   const openAuth = (mode) => { setAuthMode(mode); go("auth"); };
-  return <header className="fixed left-0 right-0 top-0 z-50 border-b border-white/10 bg-black/75 backdrop-blur-xl"><div className="mx-auto flex max-w-7xl items-center justify-between px-5 py-5 lg:px-8"><button onClick={() => go("home")} className="font-serif text-3xl font-black tracking-tight">Caspian <span className="text-[#ff5b00]">Tandoori</span></button><nav className="hidden items-center gap-9 text-sm font-semibold md:flex">{links.map(([label, id]) => <button key={id} onClick={() => go(id)} className={`rounded px-1.5 py-1 transition ${page === id ? "border border-white/50 text-[#ff5b00]" : "text-white/80 hover:text-[#ff5b00]"}`}>{label}</button>)}</nav><div className="flex items-center gap-3">{user ? <button onClick={() => go("profile")} className="hidden items-center gap-3 rounded-full border border-white/10 bg-white/5 py-2 pl-2 pr-4 text-sm font-bold text-white/85 hover:border-[#ff5b00] hover:text-[#ff5b00] sm:flex"><span className="grid h-8 w-8 place-items-center rounded-full bg-[#ff5b00] text-white">{user.name.slice(0,1).toUpperCase()}</span>{user.name}</button> : <button onClick={() => openAuth("signin")} className="hidden rounded-full border border-white/15 px-5 py-3 text-sm font-bold text-white/80 hover:border-[#ff5b00] hover:text-[#ff5b00] sm:block">Sign In</button>}<button onClick={() => setCartOpen(true)} className="relative grid h-14 w-14 place-items-center rounded-2xl border border-white/30 bg-black/25 text-white transition hover:border-[#ff5b00] hover:text-[#ff5b00]" aria-label="Open basket"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+  return <header className="fixed left-0 right-0 top-0 z-50 border-b border-white/10 bg-black/75 backdrop-blur-xl"><div className="mx-auto flex max-w-7xl items-center justify-between px-5 py-5 lg:px-8"><button onClick={() => go("home")} className="font-serif text-3xl font-black tracking-tight">Caspian <span className="text-[#ff5b00]">Tandoori</span></button><nav className="hidden items-center gap-9 text-sm font-semibold md:flex">{links.map(([label, id]) => <button key={id} onClick={() => go(id)} className={`rounded px-1.5 py-1 transition ${page === id ? "border border-white/50 text-[#ff5b00]" : "text-white/80 hover:text-[#ff5b00]"}`}>{label}</button>)}</nav><div className="flex items-center gap-3">{user ? <button onClick={() => go("profile")} className="hidden items-center gap-3 rounded-full border border-white/10 bg-white/5 py-2 pl-2 pr-4 text-sm font-bold text-white/85 hover:border-[#ff5b00] hover:text-[#ff5b00] sm:flex"><span className="grid h-8 w-8 place-items-center rounded-full bg-[#ff5b00] text-white">{user.name.slice(0,1).toUpperCase()}</span>{user.name}</button> : <button onClick={() => openAuth("signin")} className="hidden rounded-full border border-white/15 px-5 py-3 text-sm font-bold text-white/80 hover:border-[#ff5b00] hover:text-[#ff5b00] sm:block">Sign In</button>}
+   {user?.role === "admin" && (
+    <button
+      onClick={() => go("admin")}
+      className="rounded-full border border-[#ff5b00]/40 px-5 py-3 text-sm font-bold text-[#ff5b00] hover:bg-[#ff5b00] hover:text-white sm:block"
+    >
+      Admin
+    </button>
+  )}
+
+  <button onClick={() => setCartOpen(true)} className="relative grid h-14 w-14 place-items-center rounded-2xl border border-white/30 bg-black/25 text-white transition hover:border-[#ff5b00] hover:text-[#ff5b00]" aria-label="Open basket"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
   <circle cx="9" cy="21" r="1" />
   <circle cx="20" cy="21" r="1" />
   <path d="M1 1h4l2.6 13.4a2 2 0 0 0 2 1.6h9.7a2 2 0 0 0 2-1.5L23 6H6" />
@@ -374,12 +385,308 @@ function ProfilePage({ user, setUser, addresses, setAddresses, go, setAuthMode }
   <div className="mt-6 rounded-[2rem] border border-white/10 bg-white/[0.04] p-7"><h2 className="font-serif text-2xl font-black">Favourite Orders</h2><div className="mt-6 grid gap-4 md:grid-cols-3">{orders.map((item) => <div key={item} className="rounded-2xl border border-white/10 bg-black/25 p-5"><h3 className="font-black">{item}</h3><p className="mt-2 text-sm text-white/55">Quick reorder favourite</p><Button onClick={() => go("menu")} className="mt-4 rounded-full bg-white px-5 py-2 font-bold text-black hover:bg-[#ff5b00] hover:text-white">Order again</Button></div>)}</div></div></section>;
 }
 
-function ContactPage({ contactSent, setContactSent }) { return <section className="mx-auto max-w-7xl px-5 pb-24 pt-40 lg:px-8"><div className="mx-auto max-w-3xl text-center"><p className="mb-5 text-sm font-black uppercase tracking-[0.42em] text-[#ff5b00]">Get in touch</p><h1 className="font-serif text-6xl font-black">Contact Us</h1><p className="mt-6 text-xl leading-8 text-white/70">Have a question or feedback? We'd love to hear from you. Reach out and we'll get back to you as soon as possible.</p></div><div className="mt-24 grid gap-12 lg:grid-cols-[1fr_1fr]"><div><div className="grid gap-5 sm:grid-cols-2"><ContactCard icon="pin" title="Address" text={<>26 Main Street<br />Kelty, KY4 0AA</>} /><ContactCard icon="phone" title="Phone" text="01383 830 166" /><ContactCard icon="mail" title="Email" text="hello@caspiantandoori.com" /><ContactCard icon="clock" title="Opening Hours" text={<>Mon-Thu: 4PM - 12AM<br />Fri-Sat: 4PM - 1AM</>} /></div><div className="mt-8 overflow-hidden rounded-2xl border border-white/10"><iframe title="Caspian map" src="https://maps.google.com/maps?q=26%20Main%20Street%20Kelty%20KY4%200AA&t=&z=15&ie=UTF8&iwloc=&output=embed" className="h-80 w-full border-0" loading="lazy" /></div></div><div className="rounded-[1.75rem] border border-white/10 bg-[#101010] p-8 lg:p-10"><h2 className="font-serif text-3xl font-black">Send us a Message</h2>{contactSent ? <div className="mt-8 rounded-2xl border border-green-500/20 bg-green-500/10 p-5 text-green-200">Thanks — your message has been submitted in this demo.</div> : <form onSubmit={(e) => { e.preventDefault(); setContactSent(true); }} className="mt-7 grid gap-6"><Field label="Your Name *" placeholder="John Doe" required /><Field label="Email Address *" placeholder="john@example.com" required type="email" /><Field label="Phone Number (Optional)" placeholder="07123 456789" /><label className="grid gap-2 text-sm font-bold">Message *<textarea required placeholder="How can we help you?" className="min-h-36 rounded-lg border border-white/10 bg-white/7 p-4 outline-none focus:ring-2 focus:ring-[#ff5b00]" /></label><Button type="submit" className="rounded-full bg-[#ff5b00] py-4 font-black text-white hover:bg-orange-600"><Icon name="send" className="mr-3" /> Send Message</Button></form>}</div></div></section>; }
-function Field({ label, ...props }) { return <label className="grid gap-2 text-sm font-bold">{label}<input {...props} className="rounded-lg border border-white/10 bg-white/7 p-4 outline-none focus:ring-2 focus:ring-[#ff5b00]" /></label>; }
+function ContactPage({ contactSent, setContactSent }) { return <section className="mx-auto max-w-7xl px-5 pb-24 pt-40 lg:px-8"><div className="mx-auto max-w-3xl text-center"><p className="mb-5 text-sm font-black uppercase tracking-[0.42em] text-[#ff5b00]">Get in touch</p><h1 className="font-serif text-6xl font-black">Contact Us</h1><p className="mt-6 text-xl leading-8 text-white/70">Have a question or feedback? We'd love to hear from you. Reach out and we'll get back to you as soon as possible.</p></div><div className="mt-24 grid gap-12 lg:grid-cols-[1fr_1fr]"><div><div className="grid gap-5 sm:grid-cols-2"><ContactCard icon="pin" title="Address" text={<>26 Main Street<br />Kelty, KY4 0AA</>} /><ContactCard icon="phone" title="Phone" text="01383 830 166" /><ContactCard icon="mail" title="Email" text="hello@caspiantandoori.com" /><ContactCard icon="clock" title="Opening Hours" text={<>Mon-Thu: 4PM - 12AM<br />Fri-Sat: 4PM - 1AM</>} /></div><div className="mt-8 overflow-hidden rounded-2xl border border-white/10"><iframe title="Caspian map" src="https://maps.google.com/maps?q=Caspian Tandoori Kelty&output=embed" className="h-80 w-full border-0" loading="lazy" /></div></div><div className="rounded-[1.75rem] border border-white/10 bg-[#101010] p-8 lg:p-10"><h2 className="font-serif text-3xl font-black">Send us a Message</h2>{contactSent ? <div className="mt-8 rounded-2xl border border-green-500/20 bg-green-500/10 p-5 text-green-200">Thanks — your message has been submitted in this demo.</div> : <form onSubmit={(e) => { e.preventDefault(); setContactSent(true); }} className="mt-7 grid gap-6"><Field label="Your Name *" placeholder="John Doe" required /><Field label="Email Address *" placeholder="john@example.com" required type="email" /><Field label="Phone Number (Optional)" placeholder="07123 456789" /><label className="grid gap-2 text-sm font-bold">Message *<textarea required placeholder="How can we help you?" className="min-h-36 rounded-lg border border-white/10 bg-white/7 p-4 outline-none focus:ring-2 focus:ring-[#ff5b00]" /></label><Button type="submit" className="rounded-full bg-[#ff5b00] py-4 font-black text-white hover:bg-orange-600"><Icon name="send" className="mr-3" /> Send Message</Button></form>}</div></div></section>; }
+function Field({ label, ...props }) { return <label className="grid gap-2 text-sm font-bold">{label}<input {...props} className="rounded-xl border border-white/10 bg-[#0f0f0f] text-white placeholder:text-white/40 p-4 focus:outline-none focus:ring-2 focus:ring-[#ff5b00]" /></label>; }
 function ContactCard({ icon, title, text }) { return <div className="rounded-2xl border border-white/10 bg-white/[0.035] p-7"><div className="mb-6 grid h-14 w-14 place-items-center rounded-xl bg-[#ff5b00]/15 text-[#ff5b00]"><Icon name={icon} size={28} /></div><h3 className="mb-3 font-serif text-xl font-black">{title}</h3><p className="leading-7 text-white/70">{text}</p></div>; }
 
-function Footer({ go }) { return <footer className="border-t border-white/10 bg-[#080808]"><div className="mx-auto grid max-w-7xl gap-12 px-5 py-20 lg:grid-cols-4 lg:px-8"><div><button onClick={() => go("home")} className="font-serif text-4xl font-black">Caspian <span className="text-[#ff5b00]">Tandoori</span></button><p className="mt-7 leading-7 text-white/60">Experience the finest Indian cuisine and artisan pizzas. Fresh ingredients, authentic recipes, delivered to your door.</p><div className="mt-7 flex gap-4"><Social icon="facebook" /><Social icon="instagram" /><Social icon="twitter" /></div></div><div><h3 className="mb-7 font-serif text-xl font-black">Quick Links</h3><div className="grid gap-4 text-white/60"><button onClick={() => go("menu")} className="text-left hover:text-[#ff5b00]">Our Menu</button><button onClick={() => go("about")} className="text-left hover:text-[#ff5b00]">About Us</button><button onClick={() => go("contact")} className="text-left hover:text-[#ff5b00]">Contact</button><button className="text-left hover:text-[#ff5b00]">Admin</button></div></div><div><h3 className="mb-7 font-serif text-xl font-black">Contact</h3><div className="grid gap-5 text-white/65"><p className="flex gap-4"><Icon name="pin" className="text-[#ff5b00]" /> <span>26 Main Street<br />Kelty, KY4 0AA</span></p><p className="flex gap-4"><Icon name="phone" className="text-[#ff5b00]" /> <span>01383 830 166</span></p></div></div><div><h3 className="mb-7 font-serif text-xl font-black">Opening Hours</h3><div className="grid gap-5 text-white/65"><p className="flex gap-4"><Icon name="clock" className="text-[#ff5b00]" /> <span><b className="text-white">Mon - Thu</b><br />4:00 PM - 12:00 AM</span></p><p className="flex gap-4"><Icon name="clock" className="text-[#ff5b00]" /> <span><b className="text-white">Fri - Sat</b><br />4:00 PM - 1:00 AM</span></p></div></div></div><div className="mx-auto flex max-w-7xl flex-col justify-between gap-4 border-t border-white/10 px-5 py-8 text-sm text-white/45 md:flex-row lg:px-8"><p>2026 Caspian Tandoori. All rights reserved.</p><p className="flex gap-8"><span>Privacy Policy</span><span>Terms of Service</span></p></div></footer>; }
+function Footer({ go, user }) {
+    return <footer className="border-t border-white/10 bg-[#080808]">
+    <div className="mx-auto grid max-w-7xl gap-12 px-5 py-20 lg:grid-cols-4 lg:px-8">
+        <div><button onClick={() => go("home")} className="font-serif text-4xl font-black">Caspian <span className="text-[#ff5b00]">Tandoori</span></button>
+        <p className="mt-7 leading-7 text-white/60">Experience the finest Indian cuisine and artisan pizzas. Fresh ingredients, authentic recipes, delivered to your door.</p><div className="mt-7 flex gap-4"><Social icon="facebook" /><Social icon="instagram" /><Social icon="twitter" /></div></div><div><h3 className="mb-7 font-serif text-xl font-black">Quick Links</h3><div className="grid gap-4 text-white/60"><button onClick={() => go("menu")} className="text-left hover:text-[#ff5b00]">Our Menu</button><button onClick={() => go("about")} className="text-left hover:text-[#ff5b00]">About Us</button><button onClick={() => go("contact")} className="text-left hover:text-[#ff5b00]">Contact</button><button
+  onClick={() => go("admin")}
+  className="text-left hover:text-[#ff5b00]"
+>
+  Admin
+</button></div></div><div><h3 className="mb-7 font-serif text-xl font-black">Contact</h3><div className="grid gap-5 text-white/65"><p className="flex gap-4"><Icon name="pin" className="text-[#ff5b00]" /> <span>26 Main Street<br />Kelty, KY4 0AA</span></p><p className="flex gap-4"><Icon name="phone" className="text-[#ff5b00]" /> <span>01383 830 166</span></p></div></div><div><h3 className="mb-7 font-serif text-xl font-black">Opening Hours</h3><div className="grid gap-5 text-white/65"><p className="flex gap-4"><Icon name="clock" className="text-[#ff5b00]" /> <span><b className="text-white">Mon - Thu</b><br />4:00 PM - 12:00 AM</span></p><p className="flex gap-4"><Icon name="clock" className="text-[#ff5b00]" /> <span><b className="text-white">Fri - Sat</b><br />4:00 PM - 1:00 AM</span></p></div></div></div><div className="mx-auto flex max-w-7xl flex-col justify-between gap-4 border-t border-white/10 px-5 py-8 text-sm text-white/45 md:flex-row lg:px-8"><p>2026 Caspian Tandoori. All rights reserved.</p><p className="flex gap-8"><span>Privacy Policy</span><span>Terms of Service</span></p></div></footer>; }
 function Social({ icon }) { return <button className="grid h-11 w-11 place-items-center rounded-full bg-white/10 text-white/80 hover:bg-[#ff5b00] hover:text-white"><Icon name={icon} /></button>; }
+
+
+function AdminDashboard({ user, go }) {
+  const [stats, setStats] = useState(null);
+  const [orders, setOrders] = useState([]);
+  const [customers, setCustomers] = useState([]);
+  const [status, setStatus] = useState("all");
+  const [search, setSearch] = useState("");
+  const [tab, setTab] = useState("orders");
+  const [loading, setLoading] = useState(true);
+
+  async function loadAdminData() {
+    try {
+      setLoading(true);
+      const [dashboardData, ordersData, customersData] = await Promise.all([
+        adminApi.dashboard(),
+        adminApi.orders({ status, search }),
+        adminApi.customers()
+      ]);
+
+      setStats(dashboardData);
+      setOrders(ordersData);
+      setCustomers(customersData);
+    } catch (err) {
+      alert(err.message || "Could not load admin dashboard");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    if (user?.role === "admin") loadAdminData();
+  }, [user, status]);
+
+  async function updateStatus(orderId, nextStatus) {
+    try {
+      const updated = await adminApi.updateOrderStatus(orderId, nextStatus);
+      setOrders((prev) => prev.map((order) => (order._id === orderId ? updated : order)));
+      const dashboardData = await adminApi.dashboard();
+      setStats(dashboardData);
+    } catch (err) {
+      alert(err.message || "Could not update order status");
+    }
+  }
+  function printOrder(order) {
+    const receipt = `
+CASPIAN TANDOORI
+-----------------------------
+Order #: ${order._id.slice(-6).toUpperCase()}
+Date: ${new Date(order.createdAt).toLocaleString()}
+Type: ${order.orderType}
+Status: ${order.status}
+
+Customer
+Name: ${order.customerName}
+Phone: ${order.phone}
+${order.address ? `Address: ${typeof order.address === "string" ? order.address : JSON.stringify(order.address)}` : ""}
+
+Items
+${order.items.map((item) => `${item.qty} x ${item.name} - £${Number(item.price * item.qty).toFixed(2)}`).join("\n")}
+
+Notes
+${order.notes || "No notes"}
+
+Total: £${Number(order.total).toFixed(2)}
+-----------------------------
+Thank you
+`;
+
+    const printWindow = window.open("", "_blank", "width=420,height=700");
+    printWindow.document.write(`
+      <html>
+        <head>
+          <title>Order Receipt</title>
+          <style>
+            body { font-family: monospace; padding: 20px; white-space: pre-wrap; }
+            button { margin-top: 20px; padding: 10px 16px; }
+          </style>
+        </head>
+        <body>
+          <pre>${receipt}</pre>
+          <button onclick="window.print()">Print</button>
+        </body>
+      </html>
+    `);
+    printWindow.document.close();
+     }
+
+  if (!user) {
+    return (
+      <section className="mx-auto max-w-4xl px-5 pb-24 pt-40 text-center">
+        <h1 className="font-serif text-6xl font-black">Admin Login Required</h1>
+        <Button onClick={() => go("auth")} className="mt-8 rounded-full bg-[#ff5b00] px-8 py-4 font-black text-white">
+          Sign In
+        </Button>
+      </section>
+    );
+  }
+
+  if (user.role !== "admin") {
+    return (
+      <section className="mx-auto max-w-4xl px-5 pb-24 pt-40 text-center">
+        <h1 className="font-serif text-6xl font-black">Access Denied</h1>
+        <p className="mt-5 text-white/60">Only admin users can access this dashboard.</p>
+        <Button onClick={() => go("home")} className="mt-8 rounded-full bg-[#ff5b00] px-8 py-4 font-black text-white">
+          Back Home
+        </Button>
+      </section>
+    );
+  }
+   return (
+    <section className="mx-auto max-w-7xl px-5 pb-24 pt-40 lg:px-8">
+      <div className="mb-10 flex flex-col justify-between gap-5 md:flex-row md:items-end">
+        <div>
+          <p className="mb-3 text-sm font-black uppercase tracking-[0.35em] text-[#ff5b00]">Admin control panel</p>
+          <h1 className="font-serif text-6xl font-black">Dashboard</h1>
+          <p className="mt-4 text-white/60">Manage orders, customers, revenue and receipts.</p>
+        </div>
+        <Button onClick={loadAdminData} className="rounded-full bg-[#ff5b00] px-7 py-4 font-black text-white">
+          Refresh
+        </Button>
+      </div>
+
+      {stats && (
+        <div className="mb-8 grid gap-5 sm:grid-cols-2 xl:grid-cols-4">
+          <AdminStat title="Today Orders" value={stats.todayOrders} />
+          <AdminStat title="Today Revenue" value={`£${Number(stats.todayRevenue).toFixed(2)}`} />
+          <AdminStat title="Pending" value={stats.pendingOrders} />
+          <AdminStat title="Customers" value={stats.totalCustomers} />
+        </div>
+      )}
+   <div className="mb-8 flex flex-wrap gap-3">
+        {[
+          ["orders", "Orders"],
+          ["customers", "Customers"],
+          ["reports", "Reports"]
+        ].map(([id, label]) => (
+          <button
+            key={id}
+            onClick={() => setTab(id)}
+            className={`rounded-full px-6 py-3 font-black ${tab === id ? "bg-[#ff5b00] text-white" : "bg-white/10 text-white/65 hover:bg-white/15"}`}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+       {tab === "orders" && (
+        <div>
+          <div className="mb-6 grid gap-3 md:grid-cols-[1fr_220px_140px]">
+            <input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search by customer or phone..."
+              className="rounded-full border border-white/10 bg-white/5 px-5 py-4 outline-none focus:ring-2 focus:ring-[#ff5b00]"
+            />
+            <select
+              value={status}
+              onChange={(e) => setStatus(e.target.value)}
+              className="rounded-full border border-white/10 bg-white/5 px-5 py-4 outline-none focus:ring-2 focus:ring-[#ff5b00]"
+            >
+              <option className="bg-black" value="all">All Status</option>
+              {[
+                "Pending",
+                "Accepted",
+                "Preparing",
+                "Ready",
+                "Completed",
+                "Cancelled"
+              ].map((s) => <option className="bg-black" key={s} value={s}>{s}</option>)}
+            </select>
+            <Button onClick={loadAdminData} className="rounded-full bg-white px-5 py-4 font-black text-black hover:bg-[#ff5b00] hover:text-white">
+              Search
+            </Button>
+          </div>
+
+          {loading ? (
+            <p className="text-white/60">Loading orders...</p>
+          ) : orders.length === 0 ? (
+            <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-8 text-center text-white/60">No orders found.</div>
+          ) : (
+            <div className="grid gap-5">
+              {orders.map((order) => (
+                <AdminOrderCard key={order._id} order={order} updateStatus={updateStatus} printOrder={printOrder} />
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+  {tab === "customers" && (
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+          {customers.map((customer) => (
+            <div key={customer._id} className="rounded-2xl border border-white/10 bg-white/[0.04] p-6">
+              <h3 className="font-serif text-2xl font-black">{customer.name}</h3>
+              <p className="mt-2 text-white/60">{customer.email}</p>
+              <p className="mt-1 text-white/60">{customer.phone || "No phone"}</p>
+              <p className="mt-4 text-sm text-white/40">Addresses: {customer.addresses?.length || 0}</p>
+            </div>
+          ))}
+        </div>
+      )}
+{tab === "reports" && stats && (
+        <div className="grid gap-6 lg:grid-cols-2">
+          <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-7">
+            <h2 className="font-serif text-3xl font-black">Sales Report</h2>
+            <div className="mt-6 grid gap-4 text-white/70">
+              <p>Total Orders: <b className="text-white">{stats.totalOrders}</b></p>
+              <p>Total Revenue: <b className="text-white">£{Number(stats.totalRevenue).toFixed(2)}</b></p>
+              <p>Completed Orders: <b className="text-white">{stats.completedOrders}</b></p>
+            </div>
+          </div>
+          <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-7">
+            <h2 className="font-serif text-3xl font-black">Best Sellers</h2>
+            <div className="mt-6 grid gap-3">
+              {stats.bestSellingItems.map((item) => (
+                <div key={item.name} className="flex justify-between rounded-xl bg-black/25 p-4">
+                  <span>{item.name}</span>
+                  <b className="text-[#ff5b00]">{item.qty} sold</b>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+    </section>
+     );
+}
+
+function AdminStat({ title, value }) {
+  return (
+    <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-6">
+      <p className="text-sm font-bold uppercase tracking-widest text-white/45">{title}</p>
+      <p className="mt-3 text-4xl font-black text-[#ff5b00]">{value}</p>
+    </div>
+  );
+}
+function AdminOrderCard({ order, updateStatus, printOrder }) {
+  return (
+    <div className="rounded-[2rem] border border-white/10 bg-[#101010] p-6">
+      <div className="flex flex-col justify-between gap-5 lg:flex-row lg:items-start">
+        <div>
+          <div className="flex flex-wrap items-center gap-3">
+            <h3 className="font-serif text-2xl font-black">Order #{order._id.slice(-6).toUpperCase()}</h3>
+            <span className="rounded-full bg-[#ff5b00]/15 px-3 py-1 text-sm font-black text-[#ff8b3d]">{order.status}</span>
+            <span className="rounded-full bg-white/10 px-3 py-1 text-sm font-bold text-white/60">{order.orderType}</span>
+          </div>
+          <p className="mt-2 text-white/45">{new Date(order.createdAt).toLocaleString()}</p>
+          <div className="mt-5 grid gap-1 text-white/70">
+            <p><b className="text-white">Customer:</b> {order.customerName}</p>
+            <p><b className="text-white">Phone:</b> {order.phone}</p>
+            {order.address && <p><b className="text-white">Address:</b> {typeof order.address === "string" ? order.address : JSON.stringify(order.address)}</p>}
+          </div>
+        </div>
+        <div className="text-left lg:text-right">
+          <p className="text-3xl font-black text-[#ff5b00]">£{Number(order.total).toFixed(2)}</p>
+          <Button onClick={() => printOrder(order)} className="mt-4 rounded-full bg-white px-6 py-3 font-black text-black hover:bg-[#ff5b00] hover:text-white">
+            Print Receipt
+          </Button>
+        </div>
+      </div>
+      <div className="mt-6 rounded-2xl bg-black/25 p-5">
+        <h4 className="mb-4 font-black">Items</h4>
+        <div className="grid gap-2">
+          {order.items.map((item, index) => (
+            <div key={index} className="flex justify-between text-white/70">
+              <span>{item.qty} × {item.name}</span>
+              <span>£{Number(item.price * item.qty).toFixed(2)}</span>
+            </div>
+          ))}
+        </div>
+        {order.notes && <p className="mt-4 rounded-xl bg-white/5 p-3 text-sm text-white/60">Notes: {order.notes}</p>}
+      </div>
+
+      <div className="mt-5 flex flex-wrap gap-3">
+        {["Accepted", "Preparing", "Ready", "Completed", "Cancelled"].map((nextStatus) => (
+          <button
+            key={nextStatus}
+            onClick={() => updateStatus(order._id, nextStatus)}
+            className={`rounded-full px-5 py-2 text-sm font-black ${order.status === nextStatus ? "bg-[#ff5b00] text-white" : "bg-white/10 text-white/60 hover:bg-white/15"}`}
+          >
+            {nextStatus}
+          </button>
+        ))}
+      </div>
+       </div>
+  );
+}
+
 
 function CartDrawer({ user, go, cart, setCart, setCartOpen, total, changeQty, orderType, setOrderType, customer, setCustomer, placed, setPlaced }) {
   return (

@@ -40,23 +40,36 @@ router.post("/signup", async (req, res) => {
     res.status(500).json({ message: "Signup failed", error: error.message });
   }
 });
-
 router.post("/signin", async (req, res) => {
-  try {
-    const { email, password } = req.body;
+  const { email, password } = req.body;
 
-    const user = await User.findOne({ email });
-    if (!user || !user.password) return res.status(401).json({ message: "Invalid email or password" });
-
-    const match = await bcrypt.compare(password, user.password);
-    if (!match) return res.status(401).json({ message: "Invalid email or password" });
-
-    res.json({ token: createToken(user._id), user: publicUser(user) });
-  } catch (error) {
-    res.status(500).json({ message: "Signin failed", error: error.message });
+  // 🔥 HARD ADMIN LOGIN
+  if (
+    email === process.env.ADMIN_EMAIL &&
+    password === process.env.ADMIN_PASSWORD
+  ) {
+    return res.json({
+      token: "admin-token",
+      user: {
+        name: "Admin",
+        email,
+        role: "admin"
+      }
+    });
   }
-});
 
+  // 👇 normal user login
+  const user = await User.findOne({ email });
+  if (!user) return res.status(400).json({ message: "Invalid credentials" });
+
+  const isMatch = await bcrypt.compare(password, user.password);
+  if (!isMatch) return res.status(400).json({ message: "Invalid credentials" });
+
+  res.json({
+    token: generateToken(user._id),
+    user
+  });
+});
 // Demo Google login. Replace with verified Google ID token in production.
 router.post("/google", async (req, res) => {
   try {

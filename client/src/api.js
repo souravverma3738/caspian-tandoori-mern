@@ -53,3 +53,16 @@ export const orderApi = {
   create: (payload) => apiRequest("/orders", { method: "POST", body: JSON.stringify(payload) }),
   myOrders: () => apiRequest("/orders/my-orders")
 };
+export const adminApi = {
+  dashboard: () => apiRequest("/admin/dashboard"),
+  orders: (params = {}) => {
+    const query = new URLSearchParams(params).toString();
+    return apiRequest(`/admin/orders${query ? `?${query}` : ""}`);
+  },
+  updateOrderStatus: (orderId, status) =>
+    apiRequest(`/admin/orders/${orderId}/status`, {
+      method: "PATCH",
+      body: JSON.stringify({ status })
+    }),
+  customers: () => apiRequest("/admin/customers")
+};
