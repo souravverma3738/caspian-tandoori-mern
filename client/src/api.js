@@ -66,3 +66,10 @@ export const adminApi = {
     }),
   customers: () => apiRequest("/admin/customers")
 };
+export const paymentApi = {
+  createCheckoutSession: (payload) =>
+    apiRequest("/payments/create-checkout-session", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+};

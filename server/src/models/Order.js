@@ -17,7 +17,33 @@ const orderSchema = new mongoose.Schema(
     items: [orderItemSchema],
     total: { type: Number, required: true },
     notes: { type: String, default: "" },
-    status: { type: String, enum: ["Pending", "Accepted", "Preparing", "Ready", "Completed", "Cancelled"], default: "Pending" }
+      paymentStatus: {
+      type: String,
+      enum: ["Pending", "Paid", "Failed", "Refunded"],
+      default: "Pending",
+    },
+
+    paymentProvider: {
+      type: String,
+      default: "stripe",
+    },
+
+    stripeSessionId: String,
+    stripePaymentIntentId: String,
+
+    status: {
+      type: String,
+      enum: [
+        "Pending Payment",
+        "Pending",
+        "Accepted",
+        "Preparing",
+        "Ready",
+        "Completed",
+        "Cancelled",
+      ],
+      default: "Pending Payment",
+    },
   },
   { timestamps: true }
 );

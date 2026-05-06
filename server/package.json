@@ -12,7 +12,8 @@
     "dotenv": "latest",
     "express": "latest",
     "jsonwebtoken": "latest",
-    "mongoose": "latest"
+    "mongoose": "latest",
+    "stripe": "^22.1.0"
   },
   "devDependencies": {
     "nodemon": "latest"

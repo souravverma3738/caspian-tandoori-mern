@@ -1,9 +1,12 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { authApi, setSession, userApi, adminApi } from "./api";
+import { authApi, setSession, userApi, adminApi, paymentApi  } from "./api";
 import { orderApi } from "./api";
 import { signInWithPopup } from "firebase/auth";
 import { firebaseAuth, googleProvider } from "./firebase";
+import { loadStripe } from "@stripe/stripe-js";
+import { EmbeddedCheckout, EmbeddedCheckoutProvider } from "@stripe/react-stripe-js";
 
+const stripePromise = loadStripe(import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY);
 const categories = [
   { id: "starters", name: "Starters", items: [["Vegetable Pakora", 4.0, "Crisp vegetable fritters with spiced batter."], ["Chicken Pakora", 5.5, "Tender chicken pieces in crispy pakora coating."], ["Mushroom Pakora", 4.0, "Golden battered mushrooms."], ["Mix Pakora", 6.0, "A mixed box of takeaway favourites."], ["Garlic Mushrooms", 3.5, "Mushrooms cooked with garlic butter."], ["Poppadoms", 1.8, "Served with spicy onions."], ["Mince Samosa", 5.0, "Spiced mince samosas."], ["Onion Rings", 3.0, "Crispy onion rings."], ["Onion Bhaji", 4.0, "Classic onion bhaji."]] },
   { id: "snacks", name: "Quick Snacks", items: [["Chips", 2.2, "Regular portion of chips."], ["Caspian Special Chips", 5.5, "House special loaded chips."], ["Chips & Spicy Chicken", 5.0, "Chips topped with spicy chicken."], ["Chips & Donner", 4.5, "Chips with donner meat."], ["Garlic Bread", 2.5, "Warm garlic bread."], ["Spicy Potato Wedges", 3.0, "Spicy wedges with dip."], ["Mozzarella Dip", 3.5, "Crispy mozzarella bites."], ["Chicken Popcorn", 5.5, "Bite-sized chicken pieces."]] },
@@ -60,6 +63,7 @@ export default function CaspianTakeawayWebsite() {
   const go = (next) => { setPage(next); setMobileOpen(false); window.scrollTo({ top: 0, behavior: "smooth" }); };
   const addToCart = (item) => { setCart((prev) => addItemToCart(prev, item)); setPlaced(false); setCartOpen(true); };
   const changeQty = (id, amount) => { setCart((prev) => changeItemQuantity(prev, id, amount)); setPlaced(false); };
+  const [checkoutClientSecret, setCheckoutClientSecret] = useState(null);
 
   return (
     <div className="min-h-screen bg-[#080808] text-white selection:bg-orange-500/40">
@@ -73,9 +77,13 @@ export default function CaspianTakeawayWebsite() {
         {page === "auth" && <AuthPage authMode={authMode} setAuthMode={setAuthMode} setUser={setUser} setAddresses={setAddresses} go={go} />}
         {page === "profile" && <ProfilePage user={user} setUser={setUser} addresses={addresses} setAddresses={setAddresses} go={go} setAuthMode={setAuthMode} />}
         {page === "admin" && <AdminDashboard user={user} go={go} />}
+      {page === "checkout" && (
+  <CheckoutPage clientSecret={checkoutClientSecret} go={go} />
+)}
       </main>
       <Footer go={go} user={user} />
-      {cartOpen && <CartDrawer user={user} go={go} cart={cart} setCart={setCart} setCartOpen={setCartOpen} total={total} changeQty={changeQty} orderType={orderType} setOrderType={setOrderType} customer={customer} setCustomer={setCustomer} placed={placed} setPlaced={setPlaced} />}
+      {cartOpen && <CartDrawer user={user} go={go} cart={cart} setCart={setCart} setCartOpen={setCartOpen} total={total} changeQty={changeQty} orderType={orderType} setOrderType={setOrderType} customer={customer} setCustomer={setCustomer} placed={placed} setPlaced={setPlaced}
+  setCheckoutClientSecret={setCheckoutClientSecret} />}
       <style>{`
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=Playfair+Display:wght@600;700;800;900&display=swap');
 
@@ -88,7 +96,33 @@ h1,h2,h3,h4,h5,h6,.font-serif { font-family: 'Playfair Display', serif; }
     </div>
   );
 }
+function CheckoutPage({ clientSecret, go }) {
+  if (!clientSecret) {
+    return (
+      <section className="mx-auto max-w-4xl px-5 pb-24 pt-40 text-center">
+        <h1 className="font-serif text-5xl font-black">No checkout session</h1>
+        <Button onClick={() => go("menu")} className="mt-8 rounded-full bg-[#ff5b00] px-8 py-4 font-black text-white">
+          Back to Menu
+        </Button>
+      </section>
+    );
+  }
 
+  return (
+    <section className="mx-auto max-w-4xl px-5 pb-24 pt-40">
+      <h1 className="mb-8 font-serif text-5xl font-black">Secure Checkout</h1>
+
+      <div className="rounded-[2rem] bg-white p-4">
+        <EmbeddedCheckoutProvider
+          stripe={stripePromise}
+          options={{ clientSecret }}
+        >
+          <EmbeddedCheckout />
+        </EmbeddedCheckoutProvider>
+      </div>
+    </section>
+  );
+}
 function Header({ page, go, count, user, setAuthMode, setCartOpen, setMobileOpen }) {
   const links = [["Home", "home"], ["Menu", "menu"], ["About", "about"], ["Contact", "contact"]];
   const openAuth = (mode) => { setAuthMode(mode); go("auth"); };
@@ -393,12 +427,7 @@ function Footer({ go, user }) {
     return <footer className="border-t border-white/10 bg-[#080808]">
     <div className="mx-auto grid max-w-7xl gap-12 px-5 py-20 lg:grid-cols-4 lg:px-8">
         <div><button onClick={() => go("home")} className="font-serif text-4xl font-black">Caspian <span className="text-[#ff5b00]">Tandoori</span></button>
-        <p className="mt-7 leading-7 text-white/60">Experience the finest Indian cuisine and artisan pizzas. Fresh ingredients, authentic recipes, delivered to your door.</p><div className="mt-7 flex gap-4"><Social icon="facebook" /><Social icon="instagram" /><Social icon="twitter" /></div></div><div><h3 className="mb-7 font-serif text-xl font-black">Quick Links</h3><div className="grid gap-4 text-white/60"><button onClick={() => go("menu")} className="text-left hover:text-[#ff5b00]">Our Menu</button><button onClick={() => go("about")} className="text-left hover:text-[#ff5b00]">About Us</button><button onClick={() => go("contact")} className="text-left hover:text-[#ff5b00]">Contact</button><button
-  onClick={() => go("admin")}
-  className="text-left hover:text-[#ff5b00]"
->
-  Admin
-</button></div></div><div><h3 className="mb-7 font-serif text-xl font-black">Contact</h3><div className="grid gap-5 text-white/65"><p className="flex gap-4"><Icon name="pin" className="text-[#ff5b00]" /> <span>26 Main Street<br />Kelty, KY4 0AA</span></p><p className="flex gap-4"><Icon name="phone" className="text-[#ff5b00]" /> <span>01383 830 166</span></p></div></div><div><h3 className="mb-7 font-serif text-xl font-black">Opening Hours</h3><div className="grid gap-5 text-white/65"><p className="flex gap-4"><Icon name="clock" className="text-[#ff5b00]" /> <span><b className="text-white">Mon - Thu</b><br />4:00 PM - 12:00 AM</span></p><p className="flex gap-4"><Icon name="clock" className="text-[#ff5b00]" /> <span><b className="text-white">Fri - Sat</b><br />4:00 PM - 1:00 AM</span></p></div></div></div><div className="mx-auto flex max-w-7xl flex-col justify-between gap-4 border-t border-white/10 px-5 py-8 text-sm text-white/45 md:flex-row lg:px-8"><p>2026 Caspian Tandoori. All rights reserved.</p><p className="flex gap-8"><span>Privacy Policy</span><span>Terms of Service</span></p></div></footer>; }
+        <p className="mt-7 leading-7 text-white/60">Experience the finest Indian cuisine and artisan pizzas. Fresh ingredients, authentic recipes, delivered to your door.</p><div className="mt-7 flex gap-4"><Social icon="facebook" /><Social icon="instagram" /><Social icon="twitter" /></div></div><div><h3 className="mb-7 font-serif text-xl font-black">Quick Links</h3><div className="grid gap-4 text-white/60"><button onClick={() => go("menu")} className="text-left hover:text-[#ff5b00]">Our Menu</button><button onClick={() => go("about")} className="text-left hover:text-[#ff5b00]">About Us</button><button onClick={() => go("contact")} className="text-left hover:text-[#ff5b00]">Contact</button></div></div><div><h3 className="mb-7 font-serif text-xl font-black">Contact</h3><div className="grid gap-5 text-white/65"><p className="flex gap-4"><Icon name="pin" className="text-[#ff5b00]" /> <span>26 Main Street<br />Kelty, KY4 0AA</span></p><p className="flex gap-4"><Icon name="phone" className="text-[#ff5b00]" /> <span>01383 830 166</span></p></div></div><div><h3 className="mb-7 font-serif text-xl font-black">Opening Hours</h3><div className="grid gap-5 text-white/65"><p className="flex gap-4"><Icon name="clock" className="text-[#ff5b00]" /> <span><b className="text-white">Mon - Thu</b><br />4:00 PM - 12:00 AM</span></p><p className="flex gap-4"><Icon name="clock" className="text-[#ff5b00]" /> <span><b className="text-white">Fri - Sat</b><br />4:00 PM - 1:00 AM</span></p></div></div></div><div className="mx-auto flex max-w-7xl flex-col justify-between gap-4 border-t border-white/10 px-5 py-8 text-sm text-white/45 md:flex-row lg:px-8"><p>2026 Caspian Tandoori. All rights reserved.</p><p className="flex gap-8"><span>Privacy Policy</span><span>Terms of Service</span></p></div></footer>; }
 function Social({ icon }) { return <button className="grid h-11 w-11 place-items-center rounded-full bg-white/10 text-white/80 hover:bg-[#ff5b00] hover:text-white"><Icon name={icon} /></button>; }
 
 
@@ -688,7 +717,7 @@ function AdminOrderCard({ order, updateStatus, printOrder }) {
 }
 
 
-function CartDrawer({ user, go, cart, setCart, setCartOpen, total, changeQty, orderType, setOrderType, customer, setCustomer, placed, setPlaced }) {
+function CartDrawer({ user, go, cart, setCart, setCartOpen, total, changeQty, orderType, setOrderType, customer, setCustomer, placed, setPlaced, setCheckoutClientSecret, }) {
   return (
     <div className="fixed inset-0 z-[70] flex justify-end bg-black/70" onClick={() => setCartOpen(false)}>
       <aside className="h-full w-full max-w-md animate-[slideIn_.24s_ease-out_both] overflow-y-auto bg-[#0d0d0d] p-6 shadow-2xl" onClick={(e) => e.stopPropagation()}>
@@ -744,39 +773,41 @@ function CartDrawer({ user, go, cart, setCart, setCartOpen, total, changeQty, or
                 Order placed successfully and saved to database.
               </div>
             ) : (
-              <form
-                onSubmit={async (e) => {
-                  e.preventDefault();
-                  if (!user) {
-                     setCartOpen(false);
-                    go("auth");
-                    return;
-                    }
+             <form
+  onSubmit={async (e) => {
+    e.preventDefault();
 
-                  try {
-                    await orderApi.create({
-                      customerName: customer.name,
-                      phone: customer.phone,
-                      orderType,
-                      address: orderType === "Delivery" ? customer.address : null,
-                      items: cart.map((item) => ({
-                        name: item.name,
-                        price: item.price,
-                        qty: item.qty,
-                        category: item.category,
-                      })),
-                      total,
-                      notes: customer.notes,
-                    });
+    if (!user) {
+      setCartOpen(false);
+      go("auth");
+      return;
+    }
 
-                    setPlaced(true);
-                    setCart([]);
-                  } catch (err) {
-                    alert(err.message || "Order could not be saved. Please sign in first.");
-                  }
-                }}
-                className="grid gap-3"
-              >
+    try {
+      const data = await paymentApi.createCheckoutSession({
+        customerName: customer.name,
+        phone: customer.phone,
+        orderType,
+        address: orderType === "Delivery" ? customer.address : null,
+        items: cart.map((item) => ({
+          name: item.name,
+          price: item.price,
+          qty: item.qty,
+          category: item.category,
+        })),
+        total,
+        notes: customer.notes,
+      });
+
+      setCheckoutClientSecret(data.clientSecret);
+      setCartOpen(false);
+      go("checkout");
+    } catch (err) {
+      alert(err.message || "Payment could not start.");
+    }
+  }}
+  className="grid gap-3"
+>
                 <div className="grid grid-cols-2 gap-3">
                   {["Collection", "Delivery"].map((type) => (
                     <button
