@@ -64,12 +64,65 @@ export const adminApi = {
       method: "PATCH",
       body: JSON.stringify({ status })
     }),
-  customers: () => apiRequest("/admin/customers")
-};
+  customers: (params = {}) => {
+  const query = new URLSearchParams(params).toString();
+  return apiRequest(`/admin/customers${query ? `?${query}` : ""}`);
+},
+banCustomer: (customerId) =>
+  apiRequest(`/admin/customers/${customerId}/ban`, { method: "PATCH" }),
+unbanCustomer: (customerId) =>
+  apiRequest(`/admin/customers/${customerId}/unban`, { method: "PATCH" }),
+  staffAttendance: () => apiRequest("/admin/staff-attendance"),
+
+clockInStaff: (payload) =>
+  apiRequest("/admin/staff-attendance/clock-in", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  }),
+
+startBreak: (recordId) =>
+  apiRequest(`/admin/staff-attendance/${recordId}/break-start`, {
+    method: "PATCH",
+  }),
+
+endBreak: (recordId) =>
+  apiRequest(`/admin/staff-attendance/${recordId}/break-end`, {
+    method: "PATCH",
+  }),
+
+clockOutStaff: (recordId) =>
+  apiRequest(`/admin/staff-attendance/${recordId}/clock-out`, {
+    method: "PATCH",
+  }),
+  temperatureLogs: (params = {}) => {
+    const query = new URLSearchParams(params).toString();
+    return apiRequest(`/admin/temperature-logs${query ? `?${query}` : ""}`);
+  },
+
+  createTemperatureLog: (payload) =>
+    apiRequest("/admin/temperature-logs", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+
+  temperatureAlerts: () => apiRequest("/admin/temperature-alerts"),
+
+  settings: () => apiRequest("/admin/settings"),
+
+updateSettings: (payload) =>
+  apiRequest("/admin/settings", {
+    method: "PUT",
+    body: JSON.stringify(payload),
+  }),
+  };
+
 export const paymentApi = {
   createCheckoutSession: (payload) =>
     apiRequest("/payments/create-checkout-session", {
       method: "POST",
       body: JSON.stringify(payload),
     }),
+};
+export const settingsApi = {
+  get: () => apiRequest("/settings"),
 };

@@ -11,6 +11,7 @@ import adminRoutes from "./routes/admin.routes.js";
 import { fileURLToPath } from "url";
 import paymentRoutes from "./routes/payment.routes.js";
 import stripeWebhookRoutes from "./routes/stripeWebhook.routes.js";
+import RestaurantSettings from "./models/RestaurantSettings.js";
 
 connectDB();
 
@@ -21,6 +22,15 @@ app.use(express.json());
 
 app.get("/api/health", (req, res) => {
   res.json({ status: "ok", service: "Caspian Tandoori API" });
+});
+app.get("/api/settings", async (req, res) => {
+  let settings = await RestaurantSettings.findOne();
+
+  if (!settings) {
+    settings = await RestaurantSettings.create({});
+  }
+
+  res.json(settings);
 });
 app.use("/api/admin", adminRoutes);
 app.use("/api/auth", authRoutes);

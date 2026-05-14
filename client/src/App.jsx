@@ -1,10 +1,20 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { authApi, setSession, userApi, adminApi, paymentApi  } from "./api";
+import {
+  authApi,
+  setSession,
+  clearSession,
+  getStoredUser,
+  userApi,
+  adminApi,
+  paymentApi,
+  settingsApi,
+} from "./api";
 import { orderApi } from "./api";
 import { signInWithPopup } from "firebase/auth";
 import { firebaseAuth, googleProvider } from "./firebase";
 import { loadStripe } from "@stripe/stripe-js";
 import { EmbeddedCheckout, EmbeddedCheckoutProvider } from "@stripe/react-stripe-js";
+import AdminDashboard from "./components/admin/AdminDashboard";
 
 const stripePromise = loadStripe(import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY);
 const categories = [
@@ -54,9 +64,10 @@ export default function CaspianTakeawayWebsite() {
   const [contactSent, setContactSent] = useState(false);
   const [placed, setPlaced] = useState(false);
   const [authMode, setAuthMode] = useState("signin");
-  const [user, setUser] = useState(null);
-  const [addresses, setAddresses] = useState([]);
-  const flatItems = useMemo(() => makeFlatItems(categories), []);
+  const [user, setUser] = useState(() => getStoredUser());
+    const [addresses, setAddresses] = useState(() => getStoredUser()?.addresses || []);
+    const [authLoading, setAuthLoading] = useState(true);
+    const flatItems = useMemo(() => makeFlatItems(categories), []);
   const filteredItems = useMemo(() => filterMenuItems(flatItems, selectedCategory, query), [flatItems, query, selectedCategory]);
   const total = calculateCartTotal(cart);
   const count = cart.reduce((sum, item) => sum + item.qty, 0);
@@ -64,27 +75,85 @@ export default function CaspianTakeawayWebsite() {
   const addToCart = (item) => { setCart((prev) => addItemToCart(prev, item)); setPlaced(false); setCartOpen(true); };
   const changeQty = (id, amount) => { setCart((prev) => changeItemQuantity(prev, id, amount)); setPlaced(false); };
   const [checkoutClientSecret, setCheckoutClientSecret] = useState(null);
+  const [settings, setSettings] = useState(null);
+
+useEffect(() => {
+  async function restoreLogin() {
+    const storedUser = getStoredUser();
+
+    if (!storedUser) {
+      setAuthLoading(false);
+      return;
+    }
+
+    try {
+      const freshUser = await userApi.me();
+      setUser(freshUser);
+      setAddresses(freshUser.addresses || []);
+      setSession(localStorage.getItem("caspian_token"), freshUser);
+    } catch (error) {
+      clearSession();
+      setUser(null);
+      setAddresses([]);
+    } finally {
+      setAuthLoading(false);
+    }
+  }
+
+  restoreLogin();
+}, []);
+useEffect(() => {
+  settingsApi.get().then(setSettings).catch(console.error);
+}, []);
+if (authLoading) {
+  return (
+    <div className="min-h-screen bg-[#080808] text-white grid place-items-center">
+      Loading...
+    </div>
+  );
+}
 
   return (
     <div className="min-h-screen bg-[#080808] text-white selection:bg-orange-500/40">
-      <Header page={page} go={go} count={count} user={user} setAuthMode={setAuthMode} setCartOpen={setCartOpen} setMobileOpen={setMobileOpen}/>
+      <Header page={page} go={go} count={count} user={user} settings={settings} setAuthMode={setAuthMode} setCartOpen={setCartOpen} setMobileOpen={setMobileOpen}/>
       {mobileOpen && <MobileNav go={go} setMobileOpen={setMobileOpen} />}
       <main>
-        {page === "home" && <HomePage go={go} />}
+      {page === "home" && <HomePage go={go} settings={settings} />}
         {page === "menu" && <MenuPage query={query} setQuery={setQuery} selectedCategory={selectedCategory} setSelectedCategory={setSelectedCategory} filteredItems={filteredItems} addToCart={addToCart} />}
         {page === "about" && <AboutPage go={go} />}
-        {page === "contact" && <ContactPage contactSent={contactSent} setContactSent={setContactSent} />}
+        {page === "contact" && <ContactPage contactSent={contactSent} setContactSent={setContactSent} settings={settings} />}
         {page === "auth" && <AuthPage authMode={authMode} setAuthMode={setAuthMode} setUser={setUser} setAddresses={setAddresses} go={go} />}
         {page === "profile" && <ProfilePage user={user} setUser={setUser} addresses={addresses} setAddresses={setAddresses} go={go} setAuthMode={setAuthMode} />}
-        {page === "admin" && <AdminDashboard user={user} go={go} />}
+        {page === "admin" && (
+  <AdminDashboard
+    user={user}
+    go={go}
+  />
+)}
       {page === "checkout" && (
   <CheckoutPage clientSecret={checkoutClientSecret} go={go} />
 )}
       </main>
-      <Footer go={go} user={user} />
-      {cartOpen && <CartDrawer user={user} go={go} cart={cart} setCart={setCart} setCartOpen={setCartOpen} total={total} changeQty={changeQty} orderType={orderType} setOrderType={setOrderType} customer={customer} setCustomer={setCustomer} placed={placed} setPlaced={setPlaced}
-  setCheckoutClientSecret={setCheckoutClientSecret} />}
-      <style>{`
+    <Footer go={go} user={user} settings={settings} />
+  {cartOpen && (
+  <CartDrawer
+    user={user}
+    addresses={addresses}
+    go={go}
+    cart={cart}
+    setCart={setCart}
+    setCartOpen={setCartOpen}
+    total={total}
+    changeQty={changeQty}
+    orderType={orderType}
+    setOrderType={setOrderType}
+    customer={customer}
+    setCustomer={setCustomer}
+    placed={placed}
+    setPlaced={setPlaced}
+    setCheckoutClientSecret={setCheckoutClientSecret}
+  />
+)}    <style>{`
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=Playfair+Display:wght@600;700;800;900&display=swap');
 
 body { font-family: 'Inter', sans-serif; }
@@ -123,10 +192,10 @@ function CheckoutPage({ clientSecret, go }) {
     </section>
   );
 }
-function Header({ page, go, count, user, setAuthMode, setCartOpen, setMobileOpen }) {
-  const links = [["Home", "home"], ["Menu", "menu"], ["About", "about"], ["Contact", "contact"]];
+function Header({ page, go, count, user, settings, setAuthMode, setCartOpen, setMobileOpen }) {
+    const links = [["Home", "home"], ["Menu", "menu"], ["About", "about"], ["Contact", "contact"]];
   const openAuth = (mode) => { setAuthMode(mode); go("auth"); };
-  return <header className="fixed left-0 right-0 top-0 z-50 border-b border-white/10 bg-black/75 backdrop-blur-xl"><div className="mx-auto flex max-w-7xl items-center justify-between px-5 py-5 lg:px-8"><button onClick={() => go("home")} className="font-serif text-3xl font-black tracking-tight">Caspian <span className="text-[#ff5b00]">Tandoori</span></button><nav className="hidden items-center gap-9 text-sm font-semibold md:flex">{links.map(([label, id]) => <button key={id} onClick={() => go(id)} className={`rounded px-1.5 py-1 transition ${page === id ? "border border-white/50 text-[#ff5b00]" : "text-white/80 hover:text-[#ff5b00]"}`}>{label}</button>)}</nav><div className="flex items-center gap-3">{user ? <button onClick={() => go("profile")} className="hidden items-center gap-3 rounded-full border border-white/10 bg-white/5 py-2 pl-2 pr-4 text-sm font-bold text-white/85 hover:border-[#ff5b00] hover:text-[#ff5b00] sm:flex"><span className="grid h-8 w-8 place-items-center rounded-full bg-[#ff5b00] text-white">{user.name.slice(0,1).toUpperCase()}</span>{user.name}</button> : <button onClick={() => openAuth("signin")} className="hidden rounded-full border border-white/15 px-5 py-3 text-sm font-bold text-white/80 hover:border-[#ff5b00] hover:text-[#ff5b00] sm:block">Sign In</button>}
+  return <header className="fixed left-0 right-0 top-0 z-50 border-b border-white/10 bg-black/75 backdrop-blur-xl"><div className="mx-auto flex max-w-7xl items-center justify-between px-5 py-5 lg:px-8"><button onClick={() => go("home")} className="font-serif text-3xl font-black tracking-tight">{settings?.restaurantName || "Caspian Tandoori"}</button><nav className="hidden items-center gap-9 text-sm font-semibold md:flex">{links.map(([label, id]) => <button key={id} onClick={() => go(id)} className={`rounded px-1.5 py-1 transition ${page === id ? "border border-white/50 text-[#ff5b00]" : "text-white/80 hover:text-[#ff5b00]"}`}>{label}</button>)}</nav><div className="flex items-center gap-3">{user ? <button onClick={() => go("profile")} className="hidden items-center gap-3 rounded-full border border-white/10 bg-white/5 py-2 pl-2 pr-4 text-sm font-bold text-white/85 hover:border-[#ff5b00] hover:text-[#ff5b00] sm:flex"><span className="grid h-8 w-8 place-items-center rounded-full bg-[#ff5b00] text-white">{user.name.slice(0,1).toUpperCase()}</span>{user.name}</button> : <button onClick={() => openAuth("signin")} className="hidden rounded-full border border-white/15 px-5 py-3 text-sm font-bold text-white/80 hover:border-[#ff5b00] hover:text-[#ff5b00] sm:block">Sign In</button>}
    {user?.role === "admin" && (
     <button
       onClick={() => go("admin")}
@@ -359,12 +428,29 @@ function AuthPage({ authMode, setAuthMode, setUser, setAddresses, go }) {
 function ProfilePage({ user, setUser, addresses, setAddresses, go, setAuthMode }) {
   const [editing, setEditing] = useState(false);
   const [saved, setSaved] = useState(false);
-  const [profileForm, setProfileForm] = useState({ name: user?.name || "", email: user?.email || "", phone: user?.phone || "" });
+  const [myOrders, setMyOrders] = useState([]);
+  const [ordersLoading, setOrdersLoading] = useState(false);
+    const [profileForm, setProfileForm] = useState({ name: user?.name || "", email: user?.email || "", phone: user?.phone || "" });
   const [addressForm, setAddressForm] = useState({ label: "Home", line1: "", line2: "", city: "", postcode: "", instructions: "" });
+useEffect(() => {
+  async function loadMyOrders() {
+    if (!user) return;
 
+    try {
+      setOrdersLoading(true);
+      const orders = await orderApi.myOrders();
+      setMyOrders(orders);
+    } catch (err) {
+      console.error(err.message || "Could not load order history");
+    } finally {
+      setOrdersLoading(false);
+    }
+  }
+
+  loadMyOrders();
+}, [user]);
   if (!user) return <section className="mx-auto max-w-4xl px-5 pb-24 pt-40 text-center"><h1 className="font-serif text-6xl font-black">Please sign in</h1><p className="mt-5 text-white/60">You need an account to view your profile.</p><Button onClick={() => { setAuthMode("signin"); go("auth"); }} className="mt-8 rounded-full bg-[#ff5b00] px-8 py-4 font-black text-white">Sign In</Button></section>;
 
-  const orders = ["Chicken Tikka Masala", "Caspian Favourite Pizza", "Donner Kebab"];
   const saveProfile = async (e) => {
   e.preventDefault();
 
@@ -401,7 +487,20 @@ function ProfilePage({ user, setUser, addresses, setAddresses, go, setAuthMode }
     alert(err.message || "Address could not be saved.");
   }
 };
-  return <section className="mx-auto max-w-7xl px-5 pb-24 pt-40 lg:px-8"><div className="mb-10 rounded-[2rem] border border-white/10 bg-[radial-gradient(circle_at_top_right,rgba(255,91,0,.22),transparent_35%),#101010] p-8 lg:p-10"><div className="flex flex-col gap-6 md:flex-row md:items-center md:justify-between"><div className="flex items-center gap-5"><div className="grid h-20 w-20 place-items-center rounded-full bg-[#ff5b00] text-3xl font-black text-white">{user.name.slice(0,1).toUpperCase()}</div><div><p className="text-sm font-black uppercase tracking-[0.35em] text-[#ff5b00]">My account</p><h1 className="mt-2 font-serif text-5xl font-black">{user.name}</h1><p className="mt-2 text-white/60">{user.email}{user.provider ? ` · Signed in with ${user.provider}` : ""}</p></div></div><div className="flex flex-wrap gap-3"><Button onClick={() => setEditing(true)} className="rounded-full bg-white px-7 py-4 font-black text-black hover:bg-[#ff5b00] hover:text-white">Edit Profile</Button><Button onClick={() => go("menu")} className="rounded-full bg-[#ff5b00] px-7 py-4 font-black text-white">Order Now</Button><Button onClick={() => { setUser(null); setAddresses([]); setAuthMode("signin"); go("home"); }} variant="outline" className="rounded-full px-7 py-4 font-black">Sign Out</Button></div></div>{saved && <div className="mt-6 rounded-2xl border border-green-500/20 bg-green-500/10 p-4 text-green-200">Saved successfully.</div>}</div>
+
+  return <section className="mx-auto max-w-7xl px-5 pb-24 pt-40 lg:px-8"><div className="mb-10 rounded-[2rem] border border-white/10 bg-[radial-gradient(circle_at_top_right,rgba(255,91,0,.22),transparent_35%),#101010] p-8 lg:p-10"><div className="flex flex-col gap-6 md:flex-row md:items-center md:justify-between"><div className="flex items-center gap-5"><div className="grid h-20 w-20 place-items-center rounded-full bg-[#ff5b00] text-3xl font-black text-white">{user.name.slice(0,1).toUpperCase()}</div><div><p className="text-sm font-black uppercase tracking-[0.35em] text-[#ff5b00]">My account</p><h1 className="mt-2 font-serif text-5xl font-black">{user.name}</h1><p className="mt-2 text-white/60">{user.email}{user.provider ? ` · Signed in with ${user.provider}` : ""}</p></div></div><div className="flex flex-wrap gap-3"><Button onClick={() => setEditing(true)} className="rounded-full bg-white px-7 py-4 font-black text-black hover:bg-[#ff5b00] hover:text-white">Edit Profile</Button><Button onClick={() => go("menu")} className="rounded-full bg-[#ff5b00] px-7 py-4 font-black text-white">Order Now</Button><Button
+  onClick={() => {
+    clearSession();
+    setUser(null);
+    setAddresses([]);
+    setAuthMode("signin");
+    go("home");
+  }}
+  variant="outline"
+  className="rounded-full px-7 py-4 font-black"
+>
+  Sign Out
+</Button></div></div>{saved && <div className="mt-6 rounded-2xl border border-green-500/20 bg-green-500/10 p-4 text-green-200">Saved successfully.</div>}</div>
 
   <div className="grid gap-6 lg:grid-cols-3"><div className="rounded-[2rem] border border-white/10 bg-white/[0.04] p-7 lg:col-span-2"><div className="flex items-center justify-between gap-4"><h2 className="font-serif text-2xl font-black">Account Details</h2>{!editing && <button onClick={() => setEditing(true)} className="font-black text-[#ff5b00]">Edit</button>}</div>{editing ? <form onSubmit={saveProfile} className="mt-6 grid gap-5 md:grid-cols-2"><Field label="Full Name" required value={profileForm.name} onChange={(e) => setProfileForm({ ...profileForm, name: e.target.value })} /><Field label="Email Address" required type="email" value={profileForm.email} onChange={(e) => setProfileForm({ ...profileForm, email: e.target.value })} /><Field label="Phone Number" placeholder="07123 456789" value={profileForm.phone} onChange={(e) => setProfileForm({ ...profileForm, phone: e.target.value })} /><div className="flex items-end gap-3"><Button type="submit" className="rounded-full bg-[#ff5b00] px-7 py-4 font-black text-white">Save Details</Button><Button onClick={() => { setEditing(false); setProfileForm({ name: user.name, email: user.email, phone: user.phone || "" }); }} variant="outline" className="rounded-full px-7 py-4 font-black">Cancel</Button></div></form> : <div className="mt-6 grid gap-4 text-white/70 md:grid-cols-2"><p><b className="text-white">Name:</b> {user.name}</p><p><b className="text-white">Email:</b> {user.email}</p><p><b className="text-white">Phone:</b> {user.phone || "Not added"}</p><p><b className="text-white">Status:</b> Active customer</p></div>}</div><div className="rounded-[2rem] border border-white/10 bg-white/[0.04] p-7"><h2 className="font-serif text-2xl font-black">Loyalty</h2><p className="mt-6 text-4xl font-black text-[#ff5b00]">0 pts</p><p className="mt-2 text-white/60">Start ordering to collect points.</p></div></div>
 
@@ -416,22 +515,99 @@ function ProfilePage({ user, setUser, addresses, setAddresses, go, setAuthMode }
   }}
   className="text-white/40 hover:text-red-400"><Icon name="trash" /></button></div></div>)}</div>}</div><div className="rounded-[2rem] border border-white/10 bg-[#101010] p-7"><h2 className="font-serif text-2xl font-black">Add Delivery Address</h2><form onSubmit={addAddress} className="mt-6 grid gap-4"><div className="grid gap-4 sm:grid-cols-2"><Field label="Label" value={addressForm.label} onChange={(e) => setAddressForm({ ...addressForm, label: e.target.value })} /><Field label="Postcode *" required placeholder="KY4 0AA" value={addressForm.postcode} onChange={(e) => setAddressForm({ ...addressForm, postcode: e.target.value })} /></div><Field label="Address Line 1 *" required placeholder="26 Main Street" value={addressForm.line1} onChange={(e) => setAddressForm({ ...addressForm, line1: e.target.value })} /><Field label="Address Line 2" placeholder="Flat, building, landmark" value={addressForm.line2} onChange={(e) => setAddressForm({ ...addressForm, line2: e.target.value })} /><Field label="Town / City *" required placeholder="Kelty" value={addressForm.city} onChange={(e) => setAddressForm({ ...addressForm, city: e.target.value })} /><label className="grid gap-2 text-sm font-bold">Delivery Instructions<textarea placeholder="Leave at door, call on arrival..." value={addressForm.instructions} onChange={(e) => setAddressForm({ ...addressForm, instructions: e.target.value })} className="min-h-24 rounded-lg border border-white/10 bg-white/7 p-4 outline-none focus:ring-2 focus:ring-[#ff5b00]" /></label><Button type="submit" className="rounded-full bg-[#ff5b00] py-4 font-black text-white">Save Address</Button></form></div></div>
 
-  <div className="mt-6 rounded-[2rem] border border-white/10 bg-white/[0.04] p-7"><h2 className="font-serif text-2xl font-black">Favourite Orders</h2><div className="mt-6 grid gap-4 md:grid-cols-3">{orders.map((item) => <div key={item} className="rounded-2xl border border-white/10 bg-black/25 p-5"><h3 className="font-black">{item}</h3><p className="mt-2 text-sm text-white/55">Quick reorder favourite</p><Button onClick={() => go("menu")} className="mt-4 rounded-full bg-white px-5 py-2 font-bold text-black hover:bg-[#ff5b00] hover:text-white">Order again</Button></div>)}</div></div></section>;
-}
+  <div className="mt-6 rounded-[2rem] border border-white/10 bg-white/[0.04] p-7">
+  <div className="flex items-center justify-between gap-4">
+    <h2 className="font-serif text-2xl font-black">Order History</h2>
+    <Button
+      onClick={() => go("menu")}
+      className="rounded-full bg-[#ff5b00] px-5 py-3 font-black text-white"
+    >
+      New Order
+    </Button>
+  </div>
 
+  {ordersLoading ? (
+    <p className="mt-6 text-white/60">Loading orders...</p>
+  ) : myOrders.length === 0 ? (
+    <p className="mt-6 leading-7 text-white/65">
+      You have not placed any orders yet.
+    </p>
+  ) : (
+    <div className="mt-6 grid gap-4">
+      {myOrders.map((order) => (
+        <div
+          key={order._id}
+          className="rounded-2xl border border-white/10 bg-black/25 p-5"
+        >
+          <div className="flex flex-col justify-between gap-4 md:flex-row md:items-start">
+            <div>
+              <div className="flex flex-wrap items-center gap-3">
+                <h3 className="font-serif text-2xl font-black">
+                  Order #{order._id.slice(-6).toUpperCase()}
+                </h3>
+
+                <span className="rounded-full bg-[#ff5b00]/15 px-3 py-1 text-sm font-black text-[#ff8b3d]">
+                  {order.status}
+                </span>
+
+                <span className="rounded-full bg-white/10 px-3 py-1 text-sm font-bold text-white/60">
+                  {order.orderType}
+                </span>
+              </div>
+
+              <p className="mt-2 text-sm text-white/45">
+                {new Date(order.createdAt).toLocaleString()}
+              </p>
+
+              <div className="mt-4 grid gap-2 text-white/70">
+                {order.items.map((item, index) => (
+                  <div key={index} className="flex justify-between gap-4">
+                    <span>
+                      {item.qty} × {item.name}
+                    </span>
+                    <span>
+                      £{Number(item.price * item.qty).toFixed(2)}
+                    </span>
+                  </div>
+                ))}
+              </div>
+
+              {order.notes && (
+                <p className="mt-4 rounded-xl bg-white/5 p-3 text-sm text-white/55">
+                  Notes: {order.notes}
+                </p>
+              )}
+            </div>
+
+            <div className="text-left md:text-right">
+              <p className="text-2xl font-black text-[#ff5b00]">
+                £{Number(order.total).toFixed(2)}
+              </p>
+              <p className="mt-2 text-sm text-white/45">
+                Payment: {order.paymentStatus || "Pending"}
+              </p>
+            </div>
+          </div>
+        </div>
+      ))}
+    </div>
+  )}
+</div>
+</section>;
+}
 function ContactPage({ contactSent, setContactSent }) { return <section className="mx-auto max-w-7xl px-5 pb-24 pt-40 lg:px-8"><div className="mx-auto max-w-3xl text-center"><p className="mb-5 text-sm font-black uppercase tracking-[0.42em] text-[#ff5b00]">Get in touch</p><h1 className="font-serif text-6xl font-black">Contact Us</h1><p className="mt-6 text-xl leading-8 text-white/70">Have a question or feedback? We'd love to hear from you. Reach out and we'll get back to you as soon as possible.</p></div><div className="mt-24 grid gap-12 lg:grid-cols-[1fr_1fr]"><div><div className="grid gap-5 sm:grid-cols-2"><ContactCard icon="pin" title="Address" text={<>26 Main Street<br />Kelty, KY4 0AA</>} /><ContactCard icon="phone" title="Phone" text="01383 830 166" /><ContactCard icon="mail" title="Email" text="hello@caspiantandoori.com" /><ContactCard icon="clock" title="Opening Hours" text={<>Mon-Thu: 4PM - 12AM<br />Fri-Sat: 4PM - 1AM</>} /></div><div className="mt-8 overflow-hidden rounded-2xl border border-white/10"><iframe title="Caspian map" src="https://maps.google.com/maps?q=Caspian Tandoori Kelty&output=embed" className="h-80 w-full border-0" loading="lazy" /></div></div><div className="rounded-[1.75rem] border border-white/10 bg-[#101010] p-8 lg:p-10"><h2 className="font-serif text-3xl font-black">Send us a Message</h2>{contactSent ? <div className="mt-8 rounded-2xl border border-green-500/20 bg-green-500/10 p-5 text-green-200">Thanks — your message has been submitted in this demo.</div> : <form onSubmit={(e) => { e.preventDefault(); setContactSent(true); }} className="mt-7 grid gap-6"><Field label="Your Name *" placeholder="John Doe" required /><Field label="Email Address *" placeholder="john@example.com" required type="email" /><Field label="Phone Number (Optional)" placeholder="07123 456789" /><label className="grid gap-2 text-sm font-bold">Message *<textarea required placeholder="How can we help you?" className="min-h-36 rounded-lg border border-white/10 bg-white/7 p-4 outline-none focus:ring-2 focus:ring-[#ff5b00]" /></label><Button type="submit" className="rounded-full bg-[#ff5b00] py-4 font-black text-white hover:bg-orange-600"><Icon name="send" className="mr-3" /> Send Message</Button></form>}</div></div></section>; }
 function Field({ label, ...props }) { return <label className="grid gap-2 text-sm font-bold">{label}<input {...props} className="rounded-xl border border-white/10 bg-[#0f0f0f] text-white placeholder:text-white/40 p-4 focus:outline-none focus:ring-2 focus:ring-[#ff5b00]" /></label>; }
 function ContactCard({ icon, title, text }) { return <div className="rounded-2xl border border-white/10 bg-white/[0.035] p-7"><div className="mb-6 grid h-14 w-14 place-items-center rounded-xl bg-[#ff5b00]/15 text-[#ff5b00]"><Icon name={icon} size={28} /></div><h3 className="mb-3 font-serif text-xl font-black">{title}</h3><p className="leading-7 text-white/70">{text}</p></div>; }
 
-function Footer({ go, user }) {
-    return <footer className="border-t border-white/10 bg-[#080808]">
+function Footer({ go, user, settings }) {
+    return <footer className="border-t bo   rder-white/10 bg-[#080808]">
     <div className="mx-auto grid max-w-7xl gap-12 px-5 py-20 lg:grid-cols-4 lg:px-8">
-        <div><button onClick={() => go("home")} className="font-serif text-4xl font-black">Caspian <span className="text-[#ff5b00]">Tandoori</span></button>
-        <p className="mt-7 leading-7 text-white/60">Experience the finest Indian cuisine and artisan pizzas. Fresh ingredients, authentic recipes, delivered to your door.</p><div className="mt-7 flex gap-4"><Social icon="facebook" /><Social icon="instagram" /><Social icon="twitter" /></div></div><div><h3 className="mb-7 font-serif text-xl font-black">Quick Links</h3><div className="grid gap-4 text-white/60"><button onClick={() => go("menu")} className="text-left hover:text-[#ff5b00]">Our Menu</button><button onClick={() => go("about")} className="text-left hover:text-[#ff5b00]">About Us</button><button onClick={() => go("contact")} className="text-left hover:text-[#ff5b00]">Contact</button></div></div><div><h3 className="mb-7 font-serif text-xl font-black">Contact</h3><div className="grid gap-5 text-white/65"><p className="flex gap-4"><Icon name="pin" className="text-[#ff5b00]" /> <span>26 Main Street<br />Kelty, KY4 0AA</span></p><p className="flex gap-4"><Icon name="phone" className="text-[#ff5b00]" /> <span>01383 830 166</span></p></div></div><div><h3 className="mb-7 font-serif text-xl font-black">Opening Hours</h3><div className="grid gap-5 text-white/65"><p className="flex gap-4"><Icon name="clock" className="text-[#ff5b00]" /> <span><b className="text-white">Mon - Thu</b><br />4:00 PM - 12:00 AM</span></p><p className="flex gap-4"><Icon name="clock" className="text-[#ff5b00]" /> <span><b className="text-white">Fri - Sat</b><br />4:00 PM - 1:00 AM</span></p></div></div></div><div className="mx-auto flex max-w-7xl flex-col justify-between gap-4 border-t border-white/10 px-5 py-8 text-sm text-white/45 md:flex-row lg:px-8"><p>2026 Caspian Tandoori. All rights reserved.</p><p className="flex gap-8"><span>Privacy Policy</span><span>Terms of Service</span></p></div></footer>; }
+        <div><button onClick={() => go("home")} className="font-serif text-4xl font-black">{settings?.restaurantName || "Caspian Tandoori"}</button>
+        <p className="mt-7 leading-7 text-white/60">Experience the finest Indian cuisine and artisan pizzas. Fresh ingredients, authentic recipes, delivered to your door.</p><div className="mt-7 flex gap-4"><Social icon="facebook" /><Social icon="instagram" /><Social icon="twitter" /></div></div><div><h3 className="mb-7 font-serif text-xl font-black">Quick Links</h3><div className="grid gap-4 text-white/60"><button onClick={() => go("menu")} className="text-left hover:text-[#ff5b00]">Our Menu</button><button onClick={() => go("about")} className="text-left hover:text-[#ff5b00]">About Us</button><button onClick={() => go("contact")} className="text-left hover:text-[#ff5b00]">Contact</button></div></div><div><h3 className="mb-7 font-serif text-xl font-black">Contact</h3><div className="grid gap-5 text-white/65"><p className="flex gap-4"><Icon name="pin" className="text-[#ff5b00]" /> <span>{settings?.address || "26 Main Street, Kelty, KY4 0AA"}</span></p><p className="flex gap-4"><Icon name="phone" className="text-[#ff5b00]" /> <span>{settings?.phone || "01383 830 166"}</span></p></div></div><div><h3 className="mb-7 font-serif text-xl font-black">Opening Hours</h3><div className="grid gap-5 text-white/65"><p className="flex gap-4"><Icon name="clock" className="text-[#ff5b00]" /> <span><b className="text-white">Mon - Thu</b><br />{settings?.openingHours?.monday || "16:00 - 23:00"}</span></p><p className="flex gap-4"><Icon name="clock" className="text-[#ff5b00]" /> <span><b className="text-white">Fri - Sat</b><br />4:00 PM - 1:00 AM</span></p></div></div></div><div className="mx-auto flex max-w-7xl flex-col justify-between gap-4 border-t border-white/10 px-5 py-8 text-sm text-white/45 md:flex-row lg:px-8"><p>2026 Caspian Tandoori. All rights reserved.</p><p className="flex gap-8"><span>Privacy Policy</span><span>Terms of Service</span></p></div></footer>; }
 function Social({ icon }) { return <button className="grid h-11 w-11 place-items-center rounded-full bg-white/10 text-white/80 hover:bg-[#ff5b00] hover:text-white"><Icon name={icon} /></button>; }
 
 
-function AdminDashboard({ user, go }) {
+function AdminDashboard_1({ user, go }) {
   const [stats, setStats] = useState(null);
   const [orders, setOrders] = useState([]);
   const [customers, setCustomers] = useState([]);
@@ -717,8 +893,46 @@ function AdminOrderCard({ order, updateStatus, printOrder }) {
 }
 
 
-function CartDrawer({ user, go, cart, setCart, setCartOpen, total, changeQty, orderType, setOrderType, customer, setCustomer, placed, setPlaced, setCheckoutClientSecret, }) {
-  return (
+function CartDrawer({
+  user,
+  addresses = [],
+  go,
+  cart,
+  setCart,
+  setCartOpen,
+  total,
+  changeQty,
+  orderType,
+  setOrderType,
+  customer,
+  setCustomer,
+  placed,
+  setPlaced,
+  setCheckoutClientSecret,
+}) {
+const formatAddress = (address) => {
+  if (!address) return "";
+
+  return [
+    address.line1,
+    address.line2,
+    address.city,
+    address.postcode,
+  ]
+    .filter(Boolean)
+    .join(", ");
+};
+
+const savedDeliveryAddresses = addresses || [];
+
+const selectSavedAddress = (address) => {
+  setCustomer({
+    ...customer,
+    address: formatAddress(address),
+    selectedAddressId: address._id,
+  });
+};
+    return (
     <div className="fixed inset-0 z-[70] flex justify-end bg-black/70" onClick={() => setCartOpen(false)}>
       <aside className="h-full w-full max-w-md animate-[slideIn_.24s_ease-out_both] overflow-y-auto bg-[#0d0d0d] p-6 shadow-2xl" onClick={(e) => e.stopPropagation()}>
         <div className="mb-6 flex items-center justify-between">
@@ -785,8 +999,8 @@ function CartDrawer({ user, go, cart, setCart, setCartOpen, total, changeQty, or
 
     try {
       const data = await paymentApi.createCheckoutSession({
-        customerName: customer.name,
-        phone: customer.phone,
+        customerName: customer.name || user?.name,
+        phone: customer.phone || user?.phone,
         orderType,
         address: orderType === "Delivery" ? customer.address : null,
         items: cart.map((item) => ({
@@ -824,7 +1038,7 @@ function CartDrawer({ user, go, cart, setCart, setCartOpen, total, changeQty, or
                 <input
                   required
                   placeholder="Your name"
-                  value={customer.name}
+                  value={customer.name || user?.name || ""}
                   onChange={(e) => setCustomer({ ...customer, name: e.target.value })}
                   className="rounded-2xl border border-white/10 bg-white/5 p-4 outline-none focus:ring-2 focus:ring-[#ff5b00]"
                 />
@@ -832,20 +1046,80 @@ function CartDrawer({ user, go, cart, setCart, setCartOpen, total, changeQty, or
                 <input
                   required
                   placeholder="Phone number"
-                  value={customer.phone}
+                  value={customer.phone || user?.phone || ""}
                   onChange={(e) => setCustomer({ ...customer, phone: e.target.value })}
                   className="rounded-2xl border border-white/10 bg-white/5 p-4 outline-none focus:ring-2 focus:ring-[#ff5b00]"
                 />
 
                 {orderType === "Delivery" && (
-                  <input
-                    required
-                    placeholder="Delivery address"
-                    value={customer.address}
-                    onChange={(e) => setCustomer({ ...customer, address: e.target.value })}
-                    className="rounded-2xl border border-white/10 bg-white/5 p-4 outline-none focus:ring-2 focus:ring-[#ff5b00]"
-                  />
-                )}
+  <div className="grid gap-3">
+    {user && savedDeliveryAddresses.length > 0 && (
+      <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
+        <p className="mb-3 text-sm font-black text-white">
+          Choose saved address
+        </p>
+
+        <div className="grid gap-3">
+          {savedDeliveryAddresses.map((address) => {
+            const fullAddress = formatAddress(address);
+            const isSelected = customer.selectedAddressId === address._id;
+
+            return (
+              <button
+                type="button"
+                key={address._id}
+                onClick={() => selectSavedAddress(address)}
+                className={`rounded-xl border p-4 text-left transition ${
+                  isSelected
+                    ? "border-[#ff5b00] bg-[#ff5b00]/15"
+                    : "border-white/10 bg-black/25 hover:border-[#ff5b00]/60"
+                }`}
+              >
+                <div className="flex items-center justify-between gap-3">
+                  <span className="font-black text-[#ff5b00]">
+                    {address.label || "Saved Address"}
+                  </span>
+
+                  {isSelected && (
+                    <span className="rounded-full bg-[#ff5b00] px-3 py-1 text-xs font-black text-white">
+                      Selected
+                    </span>
+                  )}
+                </div>
+
+                <p className="mt-2 text-sm leading-6 text-white/70">
+                  {fullAddress}
+                </p>
+              </button>
+            );
+          })}
+        </div>
+
+        <p className="mt-4 text-xs text-white/45">
+          Or type a different address below.
+        </p>
+      </div>
+    )}
+
+    <input
+      required
+      placeholder={
+        savedDeliveryAddresses.length > 0
+          ? "Or enter a different delivery address"
+          : "Delivery address"
+      }
+      value={customer.address}
+      onChange={(e) =>
+        setCustomer({
+          ...customer,
+          address: e.target.value,
+          selectedAddressId: "",
+        })
+      }
+      className="rounded-2xl border border-white/10 bg-white/5 p-4 outline-none focus:ring-2 focus:ring-[#ff5b00]"
+    />
+  </div>
+)}
 
                 <textarea
                   placeholder="Notes / allergies"
