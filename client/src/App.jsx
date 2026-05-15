@@ -76,7 +76,7 @@ export default function CaspianTakeawayWebsite() {
   const changeQty = (id, amount) => { setCart((prev) => changeItemQuantity(prev, id, amount)); setPlaced(false); };
   const [checkoutClientSecret, setCheckoutClientSecret] = useState(null);
   const [settings, setSettings] = useState(null);
-
+const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 useEffect(() => {
   async function restoreLogin() {
     const storedUser = getStoredUser();
@@ -116,7 +116,7 @@ if (authLoading) {
   return (
     <div className="min-h-screen bg-[#080808] text-white selection:bg-orange-500/40">
       <Header page={page} go={go} count={count} user={user} settings={settings} setAuthMode={setAuthMode} setCartOpen={setCartOpen} setMobileOpen={setMobileOpen}/>
-      {mobileOpen && <MobileNav go={go} setMobileOpen={setMobileOpen} />}
+      {mobileOpen && <MobileNav go={go} user={user} setMobileOpen={setMobileOpen} />}
       <main>
       {page === "home" && <HomePage go={go} settings={settings} />}
         {page === "menu" && <MenuPage query={query} setQuery={setQuery} selectedCategory={selectedCategory} setSelectedCategory={setSelectedCategory} filteredItems={filteredItems} addToCart={addToCart} />}
@@ -211,9 +211,264 @@ function Header({ page, go, count, user, settings, setAuthMode, setCartOpen, set
   <path d="M1 1h4l2.6 13.4a2 2 0 0 0 2 1.6h9.7a2 2 0 0 0 2-1.5L23 6H6" />
 </svg>{count > 0 && <span className="absolute -right-1 -top-1 grid h-5 w-5 place-items-center rounded-full bg-[#ff5b00] text-xs font-bold text-white">{count}</span>}</button><Button onClick={() => go("menu")} className="hidden rounded-full bg-[#ff5b00] px-7 py-4 text-base font-bold text-white hover:bg-orange-600 sm:flex">Order Now</Button><button onClick={() => setMobileOpen(true)} className="md:hidden"><Icon name="menu" /></button></div></div></header>;
 }
-function MobileNav({ go, setMobileOpen }) { return <div className="fixed inset-0 z-[60] bg-black/95 p-6 md:hidden"><div className="mb-10 flex items-center justify-between"><span className="font-serif text-3xl font-black">Caspian <span className="text-[#ff5b00]">Tandoori</span></span><button onClick={() => setMobileOpen(false)}><Icon name="x" /></button></div><div className="grid gap-5 text-2xl font-bold">{[["Home", "home"], ["Menu", "menu"], ["About", "about"], ["Contact", "contact"], ["Sign In", "auth"]].map(([label, id]) => <button key={id} onClick={() => go(id)} className="text-left">{label}</button>)}</div></div>; }
+function MobileNav({ go, user, setMobileOpen }) {
+  const links = [
+    {
+      label: "Home",
+      id: "home",
+      desc: "Go to homepage",
+      icon: "star",
+    },
+    {
+      label: "Menu",
+      id: "menu",
+      desc: "Explore our menu",
+      icon: "menu",
+    },
+    {
+      label: "About",
+      id: "about",
+      desc: "Our story & values",
+      icon: "star",
+    },
+    {
+      label: "Contact",
+      id: "contact",
+      desc: "Get in touch with us",
+      icon: "phone",
+    },
+    {
+      label: user ? "My Account" : "Sign In",
+      id: user ? "profile" : "auth",
+      desc: user ? "Manage your profile" : "Login to continue",
+      icon: "star",
+      active: !!user,
+    },
+  ];
 
-function HomePage({ go }) {
+  return (
+    <div className="fixed inset-0 z-[60] overflow-y-auto bg-[#050505]/98 backdrop-blur-2xl md:hidden">
+
+      {/* HEADER */}
+      <div className="sticky top-0 z-20 border-b border-white/10 bg-black/70 px-4 py-4 backdrop-blur-xl">
+        <div className="flex items-center justify-between">
+
+          <div>
+            <h1 className="font-serif text-3xl font-black tracking-tight">
+              Caspian{" "}
+              <span className="text-[#ff5b00]">
+                Tandoori
+              </span>
+            </h1>
+
+            <p className="mt-1 text-[10px] uppercase tracking-[4px] text-orange-400/80">
+              Indian & Pizza Takeaway
+            </p>
+          </div>
+
+          <div className="flex items-center gap-2">
+
+            {/* CART */}
+            <button
+              onClick={() => {
+                setMobileOpen(false);
+                go("cart");
+              }}
+              className="flex h-12 w-12 items-center justify-center rounded-2xl border border-white/10 bg-white/[0.03] transition hover:border-orange-500/40 hover:bg-orange-500/10"
+            >
+              <Icon name="bag" className="h-5 w-5" />
+            </button>
+
+            {/* CLOSE */}
+            <button
+              onClick={() => setMobileOpen(false)}
+              className="flex h-12 w-12 items-center justify-center rounded-2xl border border-white/10 bg-white/[0.03] transition hover:border-orange-500/40 hover:bg-orange-500/10"
+            >
+              <Icon name="x" className="h-5 w-5" />
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* CONTENT */}
+      <div className="px-4 pb-10 pt-5">
+
+        {/* LINKS */}
+        <div className="space-y-3">
+          {links.map((item) => (
+            <button
+              key={item.id}
+              onClick={() => {
+                setMobileOpen(false);
+                go(item.id);
+              }}
+              className={`group relative flex w-full items-center justify-between overflow-hidden rounded-[24px] border p-4 text-left transition-all duration-300 ${
+                item.active
+                  ? "border-orange-500/60 bg-gradient-to-r from-orange-500/20 to-orange-500/5 shadow-[0_0_25px_rgba(255,91,0,0.12)]"
+                  : "border-white/10 bg-white/[0.02] hover:border-orange-500/30 hover:bg-white/[0.04]"
+              }`}
+            >
+
+              <div className="flex items-center gap-4">
+
+                {/* ICON */}
+                <div
+                  className={`flex h-12 w-12 items-center justify-center rounded-2xl ${
+                    item.active
+                      ? "bg-orange-500/20 text-orange-400"
+                      : "bg-orange-500/10 text-orange-400"
+                  }`}
+                >
+                  <Icon
+                    name={item.icon}
+                    className="h-5 w-5"
+                  />
+                </div>
+
+                {/* TEXT */}
+                <div>
+                  <h3 className="text-xl font-bold tracking-tight text-white">
+                    {item.label}
+                  </h3>
+
+                  <p className="mt-1 text-sm text-white/60">
+                    {item.desc}
+                  </p>
+                </div>
+              </div>
+
+              {/* RIGHT */}
+              <div className="flex items-center gap-2">
+
+                {item.active && (
+                  <div className="rounded-full border border-orange-500/30 bg-orange-500/15 px-3 py-1 text-xs font-semibold text-orange-300">
+                    Logged In
+                  </div>
+                )}
+
+                <div className="text-white/40 transition group-hover:translate-x-1 group-hover:text-orange-400">
+                  →
+                </div>
+              </div>
+            </button>
+          ))}
+        </div>
+
+        {/* ADMIN */}
+        {user?.role === "admin" && (
+          <>
+            <div className="my-7 flex items-center gap-3">
+              <div className="h-px flex-1 bg-gradient-to-r from-transparent to-orange-500/20" />
+
+              <span className="text-xs font-bold uppercase tracking-[4px] text-orange-400/80">
+                Admin Panel
+              </span>
+
+              <div className="h-px flex-1 bg-gradient-to-l from-transparent to-orange-500/20" />
+            </div>
+
+            <button
+              onClick={() => {
+                setMobileOpen(false);
+                go("admin");
+              }}
+              className="group flex w-full items-center justify-between rounded-[24px] border border-white/10 bg-white/[0.02] p-4 transition hover:border-orange-500/30 hover:bg-white/[0.04]"
+            >
+              <div className="flex items-center gap-4">
+
+                <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-orange-500/10 text-orange-400">
+                  <Icon
+                    name="star"
+                    className="h-5 w-5"
+                  />
+                </div>
+
+                <div>
+                  <h3 className="text-xl font-bold text-white">
+                    Admin
+                  </h3>
+
+                  <p className="mt-1 text-sm text-white/60">
+                    Dashboard & tools
+                  </p>
+                </div>
+              </div>
+
+              <div className="text-white/40 group-hover:text-orange-400">
+                →
+              </div>
+            </button>
+          </>
+        )}
+
+        {/* CTA */}
+        <div className="relative mt-8 overflow-hidden rounded-[28px] border border-white/10 bg-gradient-to-br from-white/[0.04] to-white/[0.01] p-5">
+
+          <div className="relative z-10">
+
+            <div className="flex items-center gap-4">
+
+              <img
+                src="https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?q=80&w=600&auto=format&fit=crop"
+                alt=""
+                className="h-20 w-20 rounded-full object-cover ring-4 ring-orange-500/20"
+              />
+
+              <div>
+                <h3 className="font-serif text-2xl font-black leading-tight">
+                  Craving something{" "}
+                  <span className="text-[#ff5b00]">
+                    delicious?
+                  </span>
+                </h3>
+
+                <p className="mt-2 text-sm text-white/70">
+                  Order your favorite dishes now!
+                </p>
+              </div>
+            </div>
+
+            <button
+              onClick={() => {
+                setMobileOpen(false);
+                go("menu");
+              }}
+              className="mt-6 flex w-full items-center justify-center gap-3 rounded-2xl bg-[#ff5b00] px-6 py-4 text-lg font-bold text-white transition hover:scale-[1.02] hover:bg-[#ff6a1a]"
+            >
+              <Icon name="bag" className="h-5 w-5" />
+              Order Now
+            </button>
+          </div>
+        </div>
+
+        {/* FOOTER */}
+        <div className="mt-8 flex flex-col items-center justify-center gap-5 pb-6">
+
+          <div className="flex items-center gap-6 text-white/70">
+
+            <a href="#" className="hover:text-orange-400">
+              <Icon name="facebook" />
+            </a>
+
+            <a href="#" className="hover:text-orange-400">
+              <Icon name="instagram" />
+            </a>
+
+            <a href="#" className="hover:text-orange-400">
+              <Icon name="phone" />
+            </a>
+          </div>
+
+          <p className="text-center text-xs text-white/40">
+            © 2025 Caspian Tandoori
+            <br />
+            All rights reserved.
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+}function HomePage({ go }) {
   return <><section className="relative min-h-screen overflow-hidden pt-24"><div className="absolute inset-0 bg-[radial-gradient(circle_at_65%_30%,rgba(255,91,0,.22),transparent_33%),linear-gradient(90deg,#050505_0%,rgba(0,0,0,.86)_31%,rgba(0,0,0,.45)_100%)]" /><div className="absolute inset-0 opacity-80"><div className="h-full w-full bg-[url('https://images.unsplash.com/photo-1504674900247-0877df9cc836?auto=format&fit=crop&w=1800&q=80')] bg-cover bg-center mix-blend-screen" /><div className="absolute inset-0 bg-black/55" /></div><div className="relative mx-auto grid min-h-[calc(100vh-6rem)] max-w-7xl items-center px-5 lg:px-8"><div className="max-w-2xl animate-[fadeUp_.7s_ease-out_both]"><p className="mb-6 text-sm font-black uppercase tracking-[0.42em] text-[#ff5b00]">Indian & Pizza Takeaway</p><h1 className="font-serif text-6xl font-black leading-[0.92] md:text-8xl">Taste the <br /><span className="text-[#ff5b00]">Extraordinary</span></h1><p className="mt-7 max-w-xl text-xl font-medium leading-8 text-white/85">From sizzling tandoori dishes to wood-fired style pizzas, experience flavours that transport you to culinary paradise.</p><div className="mt-10 flex flex-wrap gap-4"><Button onClick={() => go("menu")} className="rounded-full bg-[#ff5b00] px-9 py-5 text-lg font-bold text-white hover:bg-orange-600">Order Now</Button><Button onClick={() => go("menu")} variant="outline" className="rounded-full px-9 py-5 text-lg font-bold">View Menu</Button></div></div></div></section><section className="mx-auto max-w-7xl px-5 py-24 lg:px-8"><div className="text-center"><p className="mb-3 text-sm font-black uppercase tracking-[0.35em] text-[#ff5b00]">Why choose us</p><h2 className="font-serif text-5xl font-black">Fresh, Fast & Full of Flavour</h2></div><div className="mt-12 grid gap-6 md:grid-cols-3">{[["Fresh Ingredients", "Quality meats, fresh vegetables and authentic sauces prepared daily."], ["Collection & Delivery", "Quick takeaway ordering with a smooth basket and checkout."], ["Big Menu Choice", "Curries, pizzas, burgers, kebabs, tandoori, sides and desserts."]].map(([t,d]) => <div key={t} className="rounded-[2rem] border border-white/10 bg-white/[0.04] p-8"><div className="mb-5 grid h-14 w-14 place-items-center rounded-full bg-[#ff5b00]/15 text-[#ff5b00]"><Icon name="star" /></div><h3 className="mb-3 text-2xl font-black">{t}</h3><p className="leading-7 text-white/65">{d}</p></div>)}</div></section><section className="border-y border-white/10 bg-white/[0.03]"><div className="mx-auto grid max-w-7xl gap-10 px-5 py-24 lg:grid-cols-2 lg:px-8"><div className="overflow-hidden rounded-[2rem] border border-white/10"><img src="https://images.unsplash.com/photo-1600891964599-f61ba0e24092?auto=format&fit=crop&w=1000&q=80" className="h-full min-h-[420px] w-full object-cover opacity-85" alt="takeaway food" /></div><div className="flex flex-col justify-center"><p className="mb-3 text-sm font-black uppercase tracking-[0.35em] text-[#ff5b00]">Signature dishes</p><h2 className="font-serif text-5xl font-black leading-tight">Indian Classics & Takeaway Favourites</h2><p className="mt-6 text-lg leading-8 text-white/75">Enjoy chef specialities, Punjabi favourites, kormas, pizzas, grill burgers and kebabs in one professional online takeaway website.</p><Button onClick={() => go("menu")} className="mt-8 w-fit rounded-full bg-[#ff5b00] px-8 py-4 font-bold text-white">Explore Menu</Button></div></div></section><HomeFeaturedCategories go={go} /><HomeHowItWorks go={go} /><HomeSpecialOffer go={go} /><HomeTestimonials /></>;
 }
 
