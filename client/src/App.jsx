@@ -191,25 +191,108 @@ function CheckoutPage({ clientSecret, go }) {
       </div>
     </section>
   );
-}
-function Header({ page, go, count, user, settings, setAuthMode, setCartOpen, setMobileOpen }) {
-    const links = [["Home", "home"], ["Menu", "menu"], ["About", "about"], ["Contact", "contact"]];
-  const openAuth = (mode) => { setAuthMode(mode); go("auth"); };
-  return <header className="fixed left-0 right-0 top-0 z-50 border-b border-white/10 bg-black/75 backdrop-blur-xl"><div className="mx-auto flex max-w-7xl items-center justify-between px-5 py-5 lg:px-8"><button onClick={() => go("home")} className="font-serif text-3xl font-black tracking-tight">{settings?.restaurantName || "Caspian Tandoori"}</button><nav className="hidden items-center gap-9 text-sm font-semibold md:flex">{links.map(([label, id]) => <button key={id} onClick={() => go(id)} className={`rounded px-1.5 py-1 transition ${page === id ? "border border-white/50 text-[#ff5b00]" : "text-white/80 hover:text-[#ff5b00]"}`}>{label}</button>)}</nav><div className="flex items-center gap-3">{user ? <button onClick={() => go("profile")} className="hidden items-center gap-3 rounded-full border border-white/10 bg-white/5 py-2 pl-2 pr-4 text-sm font-bold text-white/85 hover:border-[#ff5b00] hover:text-[#ff5b00] sm:flex"><span className="grid h-8 w-8 place-items-center rounded-full bg-[#ff5b00] text-white">{user.name.slice(0,1).toUpperCase()}</span>{user.name}</button> : <button onClick={() => openAuth("signin")} className="hidden rounded-full border border-white/15 px-5 py-3 text-sm font-bold text-white/80 hover:border-[#ff5b00] hover:text-[#ff5b00] sm:block">Sign In</button>}
-   {user?.role === "admin" && (
-    <button
-      onClick={() => go("admin")}
-      className="rounded-full border border-[#ff5b00]/40 px-5 py-3 text-sm font-bold text-[#ff5b00] hover:bg-[#ff5b00] hover:text-white sm:block"
-    >
-      Admin
-    </button>
-  )}
+}function Header({ page, go, count, user, settings, setAuthMode, setCartOpen, setMobileOpen }) {
+  const links = [["Home", "home"], ["Menu", "menu"], ["About", "about"], ["Contact", "contact"]];
+  const openAuth = (mode) => {
+    setAuthMode(mode);
+    go("auth");
+  };
 
-  <button onClick={() => setCartOpen(true)} className="relative grid h-14 w-14 place-items-center rounded-2xl border border-white/30 bg-black/25 text-white transition hover:border-[#ff5b00] hover:text-[#ff5b00]" aria-label="Open basket"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-  <circle cx="9" cy="21" r="1" />
-  <circle cx="20" cy="21" r="1" />
-  <path d="M1 1h4l2.6 13.4a2 2 0 0 0 2 1.6h9.7a2 2 0 0 0 2-1.5L23 6H6" />
-</svg>{count > 0 && <span className="absolute -right-1 -top-1 grid h-5 w-5 place-items-center rounded-full bg-[#ff5b00] text-xs font-bold text-white">{count}</span>}</button><Button onClick={() => go("menu")} className="hidden rounded-full bg-[#ff5b00] px-7 py-4 text-base font-bold text-white hover:bg-orange-600 sm:flex">Order Now</Button><button onClick={() => setMobileOpen(true)} className="md:hidden"><Icon name="menu" /></button></div></div></header>;
+  return (
+    <header className="fixed left-0 right-0 top-0 z-50 border-b border-white/10 bg-black/75 backdrop-blur-xl">
+      <div className="mx-auto flex max-w-7xl items-center justify-between px-5 py-5 lg:px-8">
+        <button
+          onClick={() => go("home")}
+          className="flex items-center gap-3 text-left"
+        >
+          <img
+            src="/caspian_logo.jpg"
+            alt="Caspian Tandoori"
+            className="h-11 w-11 rounded-full border border-[#ff5b00]/40 object-cover"
+          />
+
+          <span className="font-serif text-3xl font-black tracking-tight">
+            {settings?.restaurantName || "Caspian Tandoori"}
+          </span>
+        </button>
+
+        <nav className="hidden items-center gap-9 text-sm font-semibold md:flex">
+          {links.map(([label, id]) => (
+            <button
+              key={id}
+              onClick={() => go(id)}
+              className={`rounded px-1.5 py-1 transition ${
+                page === id
+                  ? "border border-white/50 text-[#ff5b00]"
+                  : "text-white/80 hover:text-[#ff5b00]"
+              }`}
+            >
+              {label}
+            </button>
+          ))}
+        </nav>
+
+        <div className="flex items-center gap-3">
+          {user ? (
+            <button
+              onClick={() => go("profile")}
+              className="hidden items-center gap-3 rounded-full border border-white/10 bg-white/5 py-2 pl-2 pr-4 text-sm font-bold text-white/85 hover:border-[#ff5b00] hover:text-[#ff5b00] sm:flex"
+            >
+              <span className="grid h-8 w-8 place-items-center rounded-full bg-[#ff5b00] text-white">
+                {user.name.slice(0, 1).toUpperCase()}
+              </span>
+              {user.name}
+            </button>
+          ) : (
+            <button
+              onClick={() => openAuth("signin")}
+              className="hidden rounded-full border border-white/15 px-5 py-3 text-sm font-bold text-white/80 hover:border-[#ff5b00] hover:text-[#ff5b00] sm:block"
+            >
+              Sign In
+            </button>
+          )}
+
+          {user?.role === "admin" && (
+            <button
+              onClick={() => go("admin")}
+              className="rounded-full border border-[#ff5b00]/40 px-5 py-3 text-sm font-bold text-[#ff5b00] hover:bg-[#ff5b00] hover:text-white sm:block"
+            >
+              Admin
+            </button>
+          )}
+
+          <button
+            onClick={() => setCartOpen(true)}
+            className="relative grid h-14 w-14 place-items-center rounded-2xl border border-white/30 bg-black/25 text-white transition hover:border-[#ff5b00] hover:text-[#ff5b00]"
+            aria-label="Open basket"
+          >
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <circle cx="9" cy="21" r="1" />
+              <circle cx="20" cy="21" r="1" />
+              <path d="M1 1h4l2.6 13.4a2 2 0 0 0 2 1.6h9.7a2 2 0 0 0 2-1.5L23 6H6" />
+            </svg>
+
+            {count > 0 && (
+              <span className="absolute -right-1 -top-1 grid h-5 w-5 place-items-center rounded-full bg-[#ff5b00] text-xs font-bold text-white">
+                {count}
+              </span>
+            )}
+          </button>
+
+          <Button
+            onClick={() => go("menu")}
+            className="hidden rounded-full bg-[#ff5b00] px-7 py-4 text-base font-bold text-white hover:bg-orange-600 sm:flex"
+          >
+            Order Now
+          </Button>
+
+          <button onClick={() => setMobileOpen(true)} className="md:hidden">
+            <Icon name="menu" />
+          </button>
+        </div>
+      </div>
+    </header>
+  );
 }
 function MobileNav({ go, user, setMobileOpen }) {
   const links = [
