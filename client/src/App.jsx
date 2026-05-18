@@ -72,8 +72,12 @@ export default function CaspianTakeawayWebsite() {
   const total = calculateCartTotal(cart);
   const count = cart.reduce((sum, item) => sum + item.qty, 0);
   const go = (next) => { setPage(next); setMobileOpen(false); window.scrollTo({ top: 0, behavior: "smooth" }); };
-  const addToCart = (item) => { setCart((prev) => addItemToCart(prev, item)); setPlaced(false); setCartOpen(true); };
-  const changeQty = (id, amount) => { setCart((prev) => changeItemQuantity(prev, id, amount)); setPlaced(false); };
+
+ const addToCart = (item) => {
+  setCart((prev) => addItemToCart(prev, item));
+  setPlaced(false);
+};
+ const changeQty = (id, amount) => { setCart((prev) => changeItemQuantity(prev, id, amount)); setPlaced(false); };
   const [checkoutClientSecret, setCheckoutClientSecret] = useState(null);
   const [settings, setSettings] = useState(null);
 const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -131,7 +135,14 @@ if (authLoading) {
   />
 )}
       {page === "checkout" && (
-  <CheckoutPage clientSecret={checkoutClientSecret} go={go} />
+ <CheckoutPage
+  clientSecret={checkoutClientSecret}
+  go={go}
+  cart={cart}
+  total={total}
+  orderType={orderType}
+  customer={customer}
+/>
 )}
       </main>
     <Footer go={go} user={user} settings={settings} />
@@ -165,7 +176,7 @@ h1,h2,h3,h4,h5,h6,.font-serif { font-family: 'Playfair Display', serif; }
     </div>
   );
 }
-function CheckoutPage({ clientSecret, go }) {
+function CheckoutPage({ clientSecret, go, cart = [], total = 0, orderType, customer }) {
   if (!clientSecret) {
     return (
       <section className="mx-auto max-w-4xl px-5 pb-24 pt-40 text-center">
@@ -178,20 +189,92 @@ function CheckoutPage({ clientSecret, go }) {
   }
 
   return (
-    <section className="mx-auto max-w-4xl px-5 pb-24 pt-40">
-      <h1 className="mb-8 font-serif text-5xl font-black">Secure Checkout</h1>
+    <section className="mx-auto max-w-6xl px-5 pb-24 pt-36 lg:px-8">
+      <div className="mb-8 text-center">
+        <p className="mb-3 text-sm font-black uppercase tracking-[0.35em] text-[#ff5b00]">
+          Secure payment
+        </p>
+        <h1 className="font-serif text-5xl font-black text-white md:text-6xl">
+          Secure Checkout
+        </h1>
+        <p className="mx-auto mt-4 max-w-2xl text-white/60">
+          Review your order and complete payment securely.
+        </p>
+      </div>
 
-      <div className="rounded-[2rem] bg-white p-4">
-        <EmbeddedCheckoutProvider
-          stripe={stripePromise}
-          options={{ clientSecret }}
-        >
-          <EmbeddedCheckout />
-        </EmbeddedCheckoutProvider>
+      <div className="grid gap-8 lg:grid-cols-[420px_1fr] lg:items-start">
+        <div className="rounded-[2rem] border border-white/10 bg-[#101010] p-6">
+          <h2 className="font-serif text-3xl font-black text-white">
+            Order Summary
+          </h2>
+
+          <div className="mt-5 space-y-3">
+            {cart.map((item) => (
+              <div
+                key={item.id}
+                className="rounded-2xl border border-white/10 bg-black/30 p-4"
+              >
+                <div className="flex justify-between gap-4">
+                  <div>
+                    <h3 className="font-black text-white">{item.name}</h3>
+                    <p className="mt-1 text-sm text-white/50">
+                      {item.qty} × £{Number(item.price).toFixed(2)}
+                    </p>
+                  </div>
+
+                  <p className="font-black text-[#ff5b00]">
+                    £{Number(item.price * item.qty).toFixed(2)}
+                  </p>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          <div className="mt-6 border-t border-white/10 pt-5">
+            <div className="flex justify-between text-2xl font-black">
+              <span>Total</span>
+              <span className="text-[#ff5b00]">
+                £{Number(total).toFixed(2)}
+              </span>
+            </div>
+
+            <div className="mt-5 rounded-2xl bg-black/30 p-4 text-white/60">
+              <p><b className="text-white">Type:</b> {orderType}</p>
+              <p><b className="text-white">Name:</b> {customer?.name}</p>
+              <p><b className="text-white">Phone:</b> {customer?.phone}</p>
+
+              {orderType === "Delivery" && (
+                <p className="mt-2">
+                  <b className="text-white">Address:</b> {customer?.address}
+                </p>
+              )}
+
+              {customer?.notes && (
+                <p className="mt-2">
+                  <b className="text-white">Notes:</b> {customer.notes}
+                </p>
+              )}
+            </div>
+
+            <button
+              onClick={() => go("menu")}
+              className="mt-5 w-full rounded-full border border-white/10 px-5 py-4 font-black text-white hover:border-[#ff5b00] hover:text-[#ff5b00]"
+            >
+              Back to Menu
+            </button>
+          </div>
+        </div>
+
+        <div className="rounded-[2rem] border border-white/10 bg-white p-4 shadow-2xl shadow-black/40 md:p-6">
+          <EmbeddedCheckoutProvider stripe={stripePromise} options={{ clientSecret }}>
+            <EmbeddedCheckout />
+          </EmbeddedCheckoutProvider>
+        </div>
       </div>
     </section>
   );
-}function Header({ page, go, count, user, settings, setAuthMode, setCartOpen, setMobileOpen }) {
+}
+function Header({ page, go, count, user, settings, setAuthMode, setCartOpen, setMobileOpen }) {
   const links = [["Home", "home"], ["Menu", "menu"], ["About", "about"], ["Contact", "contact"]];
   const openAuth = (mode) => {
     setAuthMode(mode);
@@ -552,7 +635,18 @@ function MobileNav({ go, user, setMobileOpen }) {
     </div>
   );
 }function HomePage({ go }) {
-  return <><section className="relative min-h-screen overflow-hidden pt-24"><div className="absolute inset-0 bg-[radial-gradient(circle_at_65%_30%,rgba(255,91,0,.22),transparent_33%),linear-gradient(90deg,#050505_0%,rgba(0,0,0,.86)_31%,rgba(0,0,0,.45)_100%)]" /><div className="absolute inset-0 opacity-80"><div className="h-full w-full bg-[url('https://images.unsplash.com/photo-1504674900247-0877df9cc836?auto=format&fit=crop&w=1800&q=80')] bg-cover bg-center mix-blend-screen" /><div className="absolute inset-0 bg-black/55" /></div><div className="relative mx-auto grid min-h-[calc(100vh-6rem)] max-w-7xl items-center px-5 lg:px-8"><div className="max-w-2xl animate-[fadeUp_.7s_ease-out_both]"><p className="mb-6 text-sm font-black uppercase tracking-[0.42em] text-[#ff5b00]">Indian & Pizza Takeaway</p><h1 className="font-serif text-6xl font-black leading-[0.92] md:text-8xl">Taste the <br /><span className="text-[#ff5b00]">Extraordinary</span></h1><p className="mt-7 max-w-xl text-xl font-medium leading-8 text-white/85">From sizzling tandoori dishes to wood-fired style pizzas, experience flavours that transport you to culinary paradise.</p><div className="mt-10 flex flex-wrap gap-4"><Button onClick={() => go("menu")} className="rounded-full bg-[#ff5b00] px-9 py-5 text-lg font-bold text-white hover:bg-orange-600">Order Now</Button><Button onClick={() => go("menu")} variant="outline" className="rounded-full px-9 py-5 text-lg font-bold">View Menu</Button></div></div></div></section><section className="mx-auto max-w-7xl px-5 py-24 lg:px-8"><div className="text-center"><p className="mb-3 text-sm font-black uppercase tracking-[0.35em] text-[#ff5b00]">Why choose us</p><h2 className="font-serif text-5xl font-black">Fresh, Fast & Full of Flavour</h2></div><div className="mt-12 grid gap-6 md:grid-cols-3">{[["Fresh Ingredients", "Quality meats, fresh vegetables and authentic sauces prepared daily."], ["Collection & Delivery", "Quick takeaway ordering with a smooth basket and checkout."], ["Big Menu Choice", "Curries, pizzas, burgers, kebabs, tandoori, sides and desserts."]].map(([t,d]) => <div key={t} className="rounded-[2rem] border border-white/10 bg-white/[0.04] p-8"><div className="mb-5 grid h-14 w-14 place-items-center rounded-full bg-[#ff5b00]/15 text-[#ff5b00]"><Icon name="star" /></div><h3 className="mb-3 text-2xl font-black">{t}</h3><p className="leading-7 text-white/65">{d}</p></div>)}</div></section><section className="border-y border-white/10 bg-white/[0.03]"><div className="mx-auto grid max-w-7xl gap-10 px-5 py-24 lg:grid-cols-2 lg:px-8"><div className="overflow-hidden rounded-[2rem] border border-white/10"><img src="https://images.unsplash.com/photo-1600891964599-f61ba0e24092?auto=format&fit=crop&w=1000&q=80" className="h-full min-h-[420px] w-full object-cover opacity-85" alt="takeaway food" /></div><div className="flex flex-col justify-center"><p className="mb-3 text-sm font-black uppercase tracking-[0.35em] text-[#ff5b00]">Signature dishes</p><h2 className="font-serif text-5xl font-black leading-tight">Indian Classics & Takeaway Favourites</h2><p className="mt-6 text-lg leading-8 text-white/75">Enjoy chef specialities, Punjabi favourites, kormas, pizzas, grill burgers and kebabs in one professional online takeaway website.</p><Button onClick={() => go("menu")} className="mt-8 w-fit rounded-full bg-[#ff5b00] px-8 py-4 font-bold text-white">Explore Menu</Button></div></div></section><HomeFeaturedCategories go={go} /><HomeHowItWorks go={go} /><HomeSpecialOffer go={go} /><HomeTestimonials /></>;
+  return <><section className="relative min-h-screen overflow-hidden pt-24"><div className="absolute inset-0 bg-[radial-gradient(circle_at_65%_30%,rgba(255,91,0,.22),transparent_33%),linear-gradient(90deg,#050505_0%,rgba(0,0,0,.86)_31%,rgba(0,0,0,.45)_100%)]" /><div className="absolute inset-0 opacity-80"><div className="h-full w-full bg-[url('https://images.unsplash.com/photo-1504674900247-0877df9cc836?auto=format&fit=crop&w=1800&q=80')] bg-cover bg-center mix-blend-screen" /><div className="absolute inset-0 bg-black/55" /></div><div className="relative mx-auto grid min-h-[calc(100vh-6rem)] max-w-7xl items-center px-5 lg:px-8"><div className="max-w-2xl animate-[fadeUp_.7s_ease-out_both]"><p className="mb-6 text-sm font-black uppercase tracking-[0.42em] text-[#ff5b00]">Indian & Pizza Takeaway</p><h1 className="
+  font-serif
+  font-bold
+  leading-tight
+  break-words
+  text-4xl
+  sm:text-5xl
+  md:text-6xl
+  lg:text-7xl
+">
+  Taste the <span className="text-[#ff5b00]">Extraordinary</span>
+</h1><p className="mt-7 max-w-xl text-xl font-medium leading-8 text-white/85">From sizzling tandoori dishes to wood-fired style pizzas, experience flavours that transport you to culinary paradise.</p><div className="mt-10 flex flex-wrap gap-4"><Button onClick={() => go("menu")} className="rounded-full bg-[#ff5b00] px-9 py-5 text-lg font-bold text-white hover:bg-orange-600">Order Now</Button><Button onClick={() => go("menu")} variant="outline" className="rounded-full px-9 py-5 text-lg font-bold">View Menu</Button></div></div></div></section><section className="mx-auto max-w-7xl px-5 py-24 lg:px-8"><div className="text-center"><p className="mb-3 text-sm font-black uppercase tracking-[0.35em] text-[#ff5b00]">Why choose us</p><h2 className="font-serif text-5xl font-black">Fresh, Fast & Full of Flavour</h2></div><div className="mt-12 grid gap-6 md:grid-cols-3">{[["Fresh Ingredients", "Quality meats, fresh vegetables and authentic sauces prepared daily."], ["Collection & Delivery", "Quick takeaway ordering with a smooth basket and checkout."], ["Big Menu Choice", "Curries, pizzas, burgers, kebabs, tandoori, sides and desserts."]].map(([t,d]) => <div key={t} className="rounded-[2rem] border border-white/10 bg-white/[0.04] p-8"><div className="mb-5 grid h-14 w-14 place-items-center rounded-full bg-[#ff5b00]/15 text-[#ff5b00]"><Icon name="star" /></div><h3 className="mb-3 text-2xl font-black">{t}</h3><p className="leading-7 text-white/65">{d}</p></div>)}</div></section><section className="border-y border-white/10 bg-white/[0.03]"><div className="mx-auto grid max-w-7xl gap-10 px-5 py-24 lg:grid-cols-2 lg:px-8"><div className="overflow-hidden rounded-[2rem] border border-white/10"><img src="https://images.unsplash.com/photo-1600891964599-f61ba0e24092?auto=format&fit=crop&w=1000&q=80" className="h-full min-h-[420px] w-full object-cover opacity-85" alt="takeaway food" /></div><div className="flex flex-col justify-center"><p className="mb-3 text-sm font-black uppercase tracking-[0.35em] text-[#ff5b00]">Signature dishes</p><h2 className="font-serif text-5xl font-black leading-tight">Indian Classics & Takeaway Favourites</h2><p className="mt-6 text-lg leading-8 text-white/75">Enjoy chef specialities, Punjabi favourites, kormas, pizzas, grill burgers and kebabs in one professional online takeaway website.</p><Button onClick={() => go("menu")} className="mt-8 w-fit rounded-full bg-[#ff5b00] px-8 py-4 font-bold text-white">Explore Menu</Button></div></div></section><HomeFeaturedCategories go={go} /><HomeHowItWorks go={go} /><HomeSpecialOffer go={go} /><HomeTestimonials /></>;
 }
 
 function HomeFeaturedCategories({ go }) {
