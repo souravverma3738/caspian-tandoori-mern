@@ -1,5 +1,23 @@
 import mongoose from "mongoose";
 
+const dayHoursSchema = new mongoose.Schema(
+  {
+    open: { type: String, default: "16:00" },
+    close: { type: String, default: "23:00" },
+    closed: { type: Boolean, default: false },
+  },
+  { _id: false }
+);
+
+const deliveryZoneSchema = new mongoose.Schema(
+  {
+    area: { type: String, required: true },
+    fee: { type: Number, required: true },
+    keywords: { type: [String], default: [] },
+  },
+  { _id: false }
+);
+
 const restaurantSettingsSchema = new mongoose.Schema(
   {
     restaurantName: { type: String, default: "Caspian Tandoori" },
@@ -9,18 +27,35 @@ const restaurantSettingsSchema = new mongoose.Schema(
     address: { type: String, default: "" },
 
     openingHours: {
-      monday: { type: String, default: "16:00 - 23:00" },
-      tuesday: { type: String, default: "16:00 - 23:00" },
-      wednesday: { type: String, default: "16:00 - 23:00" },
-      thursday: { type: String, default: "16:00 - 23:00" },
-      friday: { type: String, default: "16:00 - 23:30" },
-      saturday: { type: String, default: "16:00 - 23:30" },
-      sunday: { type: String, default: "16:00 - 23:00" },
+      monday: { type: dayHoursSchema, default: () => ({ open: "16:00", close: "00:00", closed: false }) },
+      tuesday: { type: dayHoursSchema, default: () => ({ open: "16:00", close: "00:00", closed: false }) },
+      wednesday: { type: dayHoursSchema, default: () => ({ open: "16:00", close: "00:00", closed: false }) },
+      thursday: { type: dayHoursSchema, default: () => ({ open: "16:00", close: "00:00", closed: false }) },
+      friday: { type: dayHoursSchema, default: () => ({ open: "16:00", close: "01:00", closed: false }) },
+      saturday: { type: dayHoursSchema, default: () => ({ open: "16:00", close: "01:00", closed: false }) },
+      sunday: { type: dayHoursSchema, default: () => ({ open: "16:00", close: "00:00", closed: false }) },
     },
 
-    deliveryZones: { type: String, default: "Local area within 3 miles" },
-    deliveryFee: { type: Number, default: 2.5 },
+    acceptScheduledOrders: { type: Boolean, default: true },
+
+    deliveryZones: {
+      type: [deliveryZoneSchema],
+      default: () => ([
+        { area: "Cowdenbeath", fee: 3.5, keywords: ["cowdenbeath", "ky4 9"] },
+        { area: "Kelty", fee: 3.0, keywords: ["kelty", "ky4 0"] },
+        { area: "Kinross", fee: 6.5, keywords: ["kinross", "ky13"] },
+        { area: "Lochgelly", fee: 6.5, keywords: ["lochgelly", "ky5 9"] },
+        { area: "Ballingry", fee: 6.5, keywords: ["ballingry", "ky5 8"] },
+        { area: "Cardenden", fee: 6.5, keywords: ["cardenden", "ky5 0"] },
+      ]),
+    },
+
+    deliveryZonesText: { type: String, default: "Kelty, Cowdenbeath, Kinross, Lochgelly, Ballingry, Cardenden" },
+    deliveryFee: { type: Number, default: 3.0 },
     minimumOrder: { type: Number, default: 12 },
+
+    defaultPrepMinutes: { type: Number, default: 30 },
+    defaultDeliveryMinutes: { type: Number, default: 45 },
 
     stripePublicKey: { type: String, default: "" },
     stripeEnabled: { type: Boolean, default: true },

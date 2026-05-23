@@ -64,6 +64,11 @@ export const adminApi = {
       method: "PATCH",
       body: JSON.stringify({ status })
     }),
+  setEstimatedTime: (orderId, minutes) =>
+    apiRequest(`/admin/orders/${orderId}/estimate`, {
+      method: "PATCH",
+      body: JSON.stringify({ minutes }),
+    }),
   customers: (params = {}) => {
   const query = new URLSearchParams(params).toString();
   return apiRequest(`/admin/customers${query ? `?${query}` : ""}`);
@@ -125,4 +130,10 @@ export const paymentApi = {
 };
 export const settingsApi = {
   get: () => apiRequest("/settings"),
+  shopStatus: () => apiRequest("/settings/shop-status"),
+  deliveryQuote: (address) =>
+    apiRequest("/settings/delivery-quote", {
+      method: "POST",
+      body: JSON.stringify({ address }),
+    }),
 };

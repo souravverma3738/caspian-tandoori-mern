@@ -15,8 +15,16 @@ const orderSchema = new mongoose.Schema(
     orderType: { type: String, enum: ["Collection", "Delivery"], required: true },
     address: { type: Object, default: null },
     items: [orderItemSchema],
+    subtotal: { type: Number, default: 0 },
+    deliveryFee: { type: Number, default: 0 },
+    deliveryArea: { type: String, default: "" },
     total: { type: Number, required: true },
     notes: { type: String, default: "" },
+
+    scheduledFor: { type: Date, default: null },
+    estimatedMinutes: { type: Number, default: null },
+    estimatedReadyAt: { type: Date, default: null },
+
       paymentStatus: {
       type: String,
       enum: ["Pending", "Paid", "Failed", "Refunded"],

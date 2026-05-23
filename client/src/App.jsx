@@ -109,6 +109,21 @@ useEffect(() => {
 useEffect(() => {
   settingsApi.get().then(setSettings).catch(console.error);
 }, []);
+const [shopStatus, setShopStatus] = useState(null);
+useEffect(() => {
+  let cancelled = false;
+  async function loadStatus() {
+    try {
+      const data = await settingsApi.shopStatus();
+      if (!cancelled) setShopStatus(data);
+    } catch (err) {
+      console.error(err);
+    }
+  }
+  loadStatus();
+  const id = setInterval(loadStatus, 60000);
+  return () => { cancelled = true; clearInterval(id); };
+}, []);
 if (authLoading) {
   return (
     <div className="min-h-screen bg-[#080808] text-white grid place-items-center">
@@ -119,10 +134,10 @@ if (authLoading) {
 
   return (
     <div className="min-h-screen bg-[#080808] text-white selection:bg-orange-500/40">
-      <Header page={page} go={go} count={count} user={user} settings={settings} setAuthMode={setAuthMode} setCartOpen={setCartOpen} setMobileOpen={setMobileOpen}/>
+      <Header page={page} go={go} count={count} user={user} settings={settings} shopStatus={shopStatus} setAuthMode={setAuthMode} setCartOpen={setCartOpen} setMobileOpen={setMobileOpen}/>
       {mobileOpen && <MobileNav go={go} user={user} setMobileOpen={setMobileOpen} />}
       <main>
-      {page === "home" && <HomePage go={go} settings={settings} />}
+      {page === "home" && <HomePage go={go} settings={settings} shopStatus={shopStatus} />}
         {page === "menu" && <MenuPage query={query} setQuery={setQuery} selectedCategory={selectedCategory} setSelectedCategory={setSelectedCategory} filteredItems={filteredItems} addToCart={addToCart} />}
         {page === "about" && <AboutPage go={go} />}
         {page === "contact" && <ContactPage contactSent={contactSent} setContactSent={setContactSent} settings={settings} />}
@@ -163,6 +178,8 @@ if (authLoading) {
     placed={placed}
     setPlaced={setPlaced}
     setCheckoutClientSecret={setCheckoutClientSecret}
+    shopStatus={shopStatus}
+    settings={settings}
   />
 )}    <style>{`
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=Playfair+Display:wght@600;700;800;900&display=swap');
@@ -274,7 +291,7 @@ function CheckoutPage({ clientSecret, go, cart = [], total = 0, orderType, custo
     </section>
   );
 }
-function Header({ page, go, count, user, settings, setAuthMode, setCartOpen, setMobileOpen }) {
+function Header({ page, go, count, user, settings, shopStatus, setAuthMode, setCartOpen, setMobileOpen }) {
   const links = [["Home", "home"], ["Menu", "menu"], ["About", "about"], ["Contact", "contact"]];
   const openAuth = (mode) => {
     setAuthMode(mode);
@@ -283,6 +300,32 @@ function Header({ page, go, count, user, settings, setAuthMode, setCartOpen, set
 
   return (
     <header className="fixed left-0 right-0 top-0 z-50 border-b border-white/10 bg-black/75 backdrop-blur-xl">
+      {shopStatus && (
+        <div
+          data-testid="shop-status-bar"
+          className={`px-5 py-1.5 text-center text-xs font-bold uppercase tracking-[0.18em] ${
+            shopStatus.isOpen
+              ? "bg-emerald-600/20 text-emerald-200"
+              : "bg-red-600/20 text-red-200"
+          }`}
+        >
+          {shopStatus.isOpen ? (
+            <>
+              <span className="mr-2 inline-block h-2 w-2 animate-pulse rounded-full bg-emerald-400" />
+              Open now · closes {shopStatus.closesAt ? new Date(shopStatus.closesAt).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" }) : ""}
+            </>
+          ) : (
+            <>
+              <span className="mr-2 inline-block h-2 w-2 rounded-full bg-red-400" />
+              We are currently closed
+              {shopStatus.nextOpenAt && (
+                <> · opens {new Date(shopStatus.nextOpenAt).toLocaleString("en-GB", { weekday: "short", hour: "2-digit", minute: "2-digit" })}</>
+              )}
+              {shopStatus.acceptScheduledOrders && " · pre-order available"}
+            </>
+          )}
+        </div>
+      )}
       <div className="mx-auto flex max-w-7xl items-center justify-between px-5 py-5 lg:px-8">
         <button
           onClick={() => go("home")}
@@ -634,7 +677,7 @@ function MobileNav({ go, user, setMobileOpen }) {
       </div>
     </div>
   );
-}function HomePage({ go }) {
+}function HomePage({ go, shopStatus }) {
   return <><section className="relative min-h-screen overflow-hidden pt-24"><div className="absolute inset-0 bg-[radial-gradient(circle_at_65%_30%,rgba(255,91,0,.22),transparent_33%),linear-gradient(90deg,#050505_0%,rgba(0,0,0,.86)_31%,rgba(0,0,0,.45)_100%)]" /><div className="absolute inset-0 opacity-80"><div className="h-full w-full bg-[url('https://images.unsplash.com/photo-1504674900247-0877df9cc836?auto=format&fit=crop&w=1800&q=80')] bg-cover bg-center mix-blend-screen" /><div className="absolute inset-0 bg-black/55" /></div><div className="relative mx-auto grid min-h-[calc(100vh-6rem)] max-w-7xl items-center px-5 lg:px-8"><div className="max-w-2xl animate-[fadeUp_.7s_ease-out_both]"><p className="mb-6 text-sm font-black uppercase tracking-[0.42em] text-[#ff5b00]">Indian & Pizza Takeaway</p><h1 className="
   font-serif
   font-bold
@@ -865,11 +908,9 @@ function ProfilePage({ user, setUser, addresses, setAddresses, go, setAuthMode }
     const [profileForm, setProfileForm] = useState({ name: user?.name || "", email: user?.email || "", phone: user?.phone || "" });
   const [addressForm, setAddressForm] = useState({ label: "Home", line1: "", line2: "", city: "", postcode: "", instructions: "" });
 useEffect(() => {
+  if (!user) return;
   async function loadMyOrders() {
-    if (!user) return;
-
     try {
-      setOrdersLoading(true);
       const orders = await orderApi.myOrders();
       setMyOrders(orders);
     } catch (err) {
@@ -878,8 +919,10 @@ useEffect(() => {
       setOrdersLoading(false);
     }
   }
-
+  setOrdersLoading(true);
   loadMyOrders();
+  const id = setInterval(loadMyOrders, 20000);
+  return () => clearInterval(id);
 }, [user]);
   if (!user) return <section className="mx-auto max-w-4xl px-5 pb-24 pt-40 text-center"><h1 className="font-serif text-6xl font-black">Please sign in</h1><p className="mt-5 text-white/60">You need an account to view your profile.</p><Button onClick={() => { setAuthMode("signin"); go("auth"); }} className="mt-8 rounded-full bg-[#ff5b00] px-8 py-4 font-black text-white">Sign In</Button></section>;
 
@@ -969,6 +1012,7 @@ useEffect(() => {
       {myOrders.map((order) => (
         <div
           key={order._id}
+          data-testid={`my-order-${order._id}`}
           className="rounded-2xl border border-white/10 bg-black/25 p-5"
         >
           <div className="flex flex-col justify-between gap-4 md:flex-row md:items-start">
@@ -978,7 +1022,10 @@ useEffect(() => {
                   Order #{order._id.slice(-6).toUpperCase()}
                 </h3>
 
-                <span className="rounded-full bg-[#ff5b00]/15 px-3 py-1 text-sm font-black text-[#ff8b3d]">
+                <span
+                  data-testid={`order-status-${order._id}`}
+                  className="rounded-full bg-[#ff5b00]/15 px-3 py-1 text-sm font-black text-[#ff8b3d]"
+                >
                   {order.status}
                 </span>
 
@@ -990,6 +1037,8 @@ useEffect(() => {
               <p className="mt-2 text-sm text-white/45">
                 {new Date(order.createdAt).toLocaleString()}
               </p>
+
+              <OrderStatusTracker order={order} />
 
               <div className="mt-4 grid gap-2 text-white/70">
                 {order.items.map((item, index) => (
@@ -1003,6 +1052,13 @@ useEffect(() => {
                   </div>
                 ))}
               </div>
+
+              {(order.deliveryFee > 0 || order.subtotal > 0) && (
+                <div className="mt-3 rounded-xl bg-white/5 p-3 text-sm text-white/55">
+                  {order.subtotal > 0 && <p>Subtotal: £{Number(order.subtotal).toFixed(2)}</p>}
+                  {order.deliveryFee > 0 && <p>Delivery ({order.deliveryArea || "delivery"}): £{Number(order.deliveryFee).toFixed(2)}</p>}
+                </div>
+              )}
 
               {order.notes && (
                 <p className="mt-4 rounded-xl bg-white/5 p-3 text-sm text-white/55">
@@ -1018,6 +1074,11 @@ useEffect(() => {
               <p className="mt-2 text-sm text-white/45">
                 Payment: {order.paymentStatus || "Pending"}
               </p>
+              {order.scheduledFor && (
+                <p className="mt-2 text-xs text-white/45">
+                  Scheduled: {new Date(order.scheduledFor).toLocaleString("en-GB")}
+                </p>
+              )}
             </div>
           </div>
         </div>
@@ -1027,6 +1088,64 @@ useEffect(() => {
 </div>
 </section>;
 }
+function OrderStatusTracker({ order }) {
+  const isCollection = order.orderType === "Collection";
+  const steps = isCollection
+    ? ["Pending", "Accepted", "Preparing", "Ready", "Completed"]
+    : ["Pending", "Accepted", "Preparing", "Out for delivery", "Delivered"];
+
+  if (order.status === "Cancelled") {
+    return (
+      <div data-testid={`status-tracker-${order._id}`} className="mt-4 rounded-xl border border-red-500/30 bg-red-500/10 p-3 text-sm font-bold text-red-200">
+        This order was cancelled.
+      </div>
+    );
+  }
+
+  let currentIndex = steps.indexOf(order.status);
+  if (order.status === "Completed" || order.status === "Delivered") currentIndex = steps.length - 1;
+  if (currentIndex < 0) currentIndex = 0;
+
+  let etaText = "";
+  if (order.estimatedReadyAt && !["Completed", "Delivered", "Cancelled"].includes(order.status)) {
+    const remainingMs = new Date(order.estimatedReadyAt).getTime() - Date.now();
+    if (remainingMs > 0) {
+      const mins = Math.max(1, Math.round(remainingMs / 60000));
+      etaText = isCollection ? `Ready in about ${mins} min` : `Arriving in about ${mins} min`;
+    } else {
+      etaText = isCollection ? "Should be ready any minute" : "On its way to you";
+    }
+  }
+
+  return (
+    <div data-testid={`status-tracker-${order._id}`} className="mt-4 rounded-xl bg-white/5 p-3">
+      <div className="flex items-center justify-between gap-2">
+        {steps.map((step, idx) => {
+          const reached = idx <= currentIndex;
+          const isActive = idx === currentIndex;
+          return (
+            <div key={step} className="flex flex-1 flex-col items-center">
+              <div
+                className={`grid h-6 w-6 place-items-center rounded-full text-[10px] font-black ${
+                  reached ? "bg-[#ff5b00] text-white" : "bg-white/10 text-white/40"
+                } ${isActive ? "ring-2 ring-[#ff5b00]/60" : ""}`}
+              >
+                {idx + 1}
+              </div>
+              <span className={`mt-1 text-center text-[10px] font-bold ${reached ? "text-white" : "text-white/40"}`}>
+                {step}
+              </span>
+            </div>
+          );
+        })}
+      </div>
+      {etaText && (
+        <p className="mt-3 text-center text-sm font-black text-[#ff8b3d]">{etaText}</p>
+      )}
+    </div>
+  );
+}
+
 function ContactPage({ contactSent, setContactSent }) { return <section className="mx-auto max-w-7xl px-5 pb-24 pt-40 lg:px-8"><div className="mx-auto max-w-3xl text-center"><p className="mb-5 text-sm font-black uppercase tracking-[0.42em] text-[#ff5b00]">Get in touch</p><h1 className="font-serif text-6xl font-black">Contact Us</h1><p className="mt-6 text-xl leading-8 text-white/70">Have a question or feedback? We'd love to hear from you. Reach out and we'll get back to you as soon as possible.</p></div><div className="mt-24 grid gap-12 lg:grid-cols-[1fr_1fr]"><div><div className="grid gap-5 sm:grid-cols-2"><ContactCard icon="pin" title="Address" text={<>26 Main Street<br />Kelty, KY4 0AA</>} /><ContactCard icon="phone" title="Phone" text="01383 830 166" /><ContactCard icon="mail" title="Email" text="hello@caspiantandoori.com" /><ContactCard icon="clock" title="Opening Hours" text={<>Mon-Thu: 4PM - 12AM<br />Fri-Sat: 4PM - 1AM</>} /></div><div className="mt-8 overflow-hidden rounded-2xl border border-white/10"><iframe title="Caspian map" src="https://maps.google.com/maps?q=Caspian Tandoori Kelty&output=embed" className="h-80 w-full border-0" loading="lazy" /></div></div><div className="rounded-[1.75rem] border border-white/10 bg-[#101010] p-8 lg:p-10"><h2 className="font-serif text-3xl font-black">Send us a Message</h2>{contactSent ? <div className="mt-8 rounded-2xl border border-green-500/20 bg-green-500/10 p-5 text-green-200">Thanks — your message has been submitted in this demo.</div> : <form onSubmit={(e) => { e.preventDefault(); setContactSent(true); }} className="mt-7 grid gap-6"><Field label="Your Name *" placeholder="John Doe" required /><Field label="Email Address *" placeholder="john@example.com" required type="email" /><Field label="Phone Number (Optional)" placeholder="07123 456789" /><label className="grid gap-2 text-sm font-bold">Message *<textarea required placeholder="How can we help you?" className="min-h-36 rounded-lg border border-white/10 bg-white/7 p-4 outline-none focus:ring-2 focus:ring-[#ff5b00]" /></label><Button type="submit" className="rounded-full bg-[#ff5b00] py-4 font-black text-white hover:bg-orange-600"><Icon name="send" className="mr-3" /> Send Message</Button></form>}</div></div></section>; }
 function Field({ label, ...props }) { return <label className="grid gap-2 text-sm font-bold">{label}<input {...props} className="rounded-xl border border-white/10 bg-[#0f0f0f] text-white placeholder:text-white/40 p-4 focus:outline-none focus:ring-2 focus:ring-[#ff5b00]" /></label>; }
 function ContactCard({ icon, title, text }) { return <div className="rounded-2xl border border-white/10 bg-white/[0.035] p-7"><div className="mb-6 grid h-14 w-14 place-items-center rounded-xl bg-[#ff5b00]/15 text-[#ff5b00]"><Icon name={icon} size={28} /></div><h3 className="mb-3 font-serif text-xl font-black">{title}</h3><p className="leading-7 text-white/70">{text}</p></div>; }
@@ -1035,7 +1154,7 @@ function Footer({ go, user, settings }) {
     return <footer className="border-t bo   rder-white/10 bg-[#080808]">
     <div className="mx-auto grid max-w-7xl gap-12 px-5 py-20 lg:grid-cols-4 lg:px-8">
         <div><button onClick={() => go("home")} className="font-serif text-4xl font-black">{settings?.restaurantName || "Caspian Tandoori"}</button>
-        <p className="mt-7 leading-7 text-white/60">Experience the finest Indian cuisine and artisan pizzas. Fresh ingredients, authentic recipes, delivered to your door.</p><div className="mt-7 flex gap-4"><Social icon="facebook" /><Social icon="instagram" /><Social icon="twitter" /></div></div><div><h3 className="mb-7 font-serif text-xl font-black">Quick Links</h3><div className="grid gap-4 text-white/60"><button onClick={() => go("menu")} className="text-left hover:text-[#ff5b00]">Our Menu</button><button onClick={() => go("about")} className="text-left hover:text-[#ff5b00]">About Us</button><button onClick={() => go("contact")} className="text-left hover:text-[#ff5b00]">Contact</button></div></div><div><h3 className="mb-7 font-serif text-xl font-black">Contact</h3><div className="grid gap-5 text-white/65"><p className="flex gap-4"><Icon name="pin" className="text-[#ff5b00]" /> <span>{settings?.address || "26 Main Street, Kelty, KY4 0AA"}</span></p><p className="flex gap-4"><Icon name="phone" className="text-[#ff5b00]" /> <span>{settings?.phone || "01383 830 166"}</span></p></div></div><div><h3 className="mb-7 font-serif text-xl font-black">Opening Hours</h3><div className="grid gap-5 text-white/65"><p className="flex gap-4"><Icon name="clock" className="text-[#ff5b00]" /> <span><b className="text-white">Mon - Thu</b><br />{settings?.openingHours?.monday || "16:00 - 23:00"}</span></p><p className="flex gap-4"><Icon name="clock" className="text-[#ff5b00]" /> <span><b className="text-white">Fri - Sat</b><br />4:00 PM - 1:00 AM</span></p></div></div></div><div className="mx-auto flex max-w-7xl flex-col justify-between gap-4 border-t border-white/10 px-5 py-8 text-sm text-white/45 md:flex-row lg:px-8"><p>2026 Caspian Tandoori. All rights reserved.</p><p className="flex gap-8"><span>Privacy Policy</span><span>Terms of Service</span></p></div></footer>; }
+        <p className="mt-7 leading-7 text-white/60">Experience the finest Indian cuisine and artisan pizzas. Fresh ingredients, authentic recipes, delivered to your door.</p><div className="mt-7 flex gap-4"><Social icon="facebook" /><Social icon="instagram" /><Social icon="twitter" /></div></div><div><h3 className="mb-7 font-serif text-xl font-black">Quick Links</h3><div className="grid gap-4 text-white/60"><button onClick={() => go("menu")} className="text-left hover:text-[#ff5b00]">Our Menu</button><button onClick={() => go("about")} className="text-left hover:text-[#ff5b00]">About Us</button><button onClick={() => go("contact")} className="text-left hover:text-[#ff5b00]">Contact</button></div></div><div><h3 className="mb-7 font-serif text-xl font-black">Contact</h3><div className="grid gap-5 text-white/65"><p className="flex gap-4"><Icon name="pin" className="text-[#ff5b00]" /> <span>{settings?.address || "26 Main Street, Kelty, KY4 0AA"}</span></p><p className="flex gap-4"><Icon name="phone" className="text-[#ff5b00]" /> <span>{settings?.phone || "01383 830 166"}</span></p></div></div><div><h3 className="mb-7 font-serif text-xl font-black">Opening Hours</h3><div className="grid gap-5 text-white/65"><p className="flex gap-4"><Icon name="clock" className="text-[#ff5b00]" /> <span><b className="text-white">Mon - Thu, Sun</b><br />4:00 PM - 12:00 AM</span></p><p className="flex gap-4"><Icon name="clock" className="text-[#ff5b00]" /> <span><b className="text-white">Fri - Sat</b><br />4:00 PM - 1:00 AM</span></p></div></div></div><div className="mx-auto flex max-w-7xl flex-col justify-between gap-4 border-t border-white/10 px-5 py-8 text-sm text-white/45 md:flex-row lg:px-8"><p>2026 Caspian Tandoori. All rights reserved.</p><p className="flex gap-8"><span>Privacy Policy</span><span>Terms of Service</span></p></div></footer>; }
 function Social({ icon }) { return <button className="grid h-11 w-11 place-items-center rounded-full bg-white/10 text-white/80 hover:bg-[#ff5b00] hover:text-white"><Icon name={icon} /></button>; }
 
 
@@ -1341,38 +1460,176 @@ function CartDrawer({
   placed,
   setPlaced,
   setCheckoutClientSecret,
+  shopStatus,
+  settings,
 }) {
-const formatAddress = (address) => {
-  if (!address) return "";
+  const formatAddress = (address) => {
+    if (!address) return "";
+    return [address.line1, address.line2, address.city, address.postcode]
+      .filter(Boolean)
+      .join(", ");
+  };
 
-  return [
-    address.line1,
-    address.line2,
-    address.city,
-    address.postcode,
-  ]
-    .filter(Boolean)
-    .join(", ");
-};
+  const savedDeliveryAddresses = addresses || [];
 
-const savedDeliveryAddresses = addresses || [];
+  const [deliveryQuote, setDeliveryQuote] = useState(null);
+  const [quoteLoading, setQuoteLoading] = useState(false);
+  const [scheduleMode, setScheduleMode] = useState("asap");
+  const [scheduledFor, setScheduledFor] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState("");
 
-const selectSavedAddress = (address) => {
-  setCustomer({
-    ...customer,
-    address: formatAddress(address),
-    selectedAddressId: address._id,
-  });
-};
-    return (
+  const isOpen = shopStatus?.isOpen;
+  const acceptsScheduled = shopStatus?.acceptScheduledOrders !== false;
+  const minimumOrder = Number(settings?.minimumOrder || 0);
+
+  // When closed, force scheduling.
+  useEffect(() => {
+    if (!isOpen && acceptsScheduled) setScheduleMode("schedule");
+  }, [isOpen, acceptsScheduled]);
+
+  // Debounced delivery quote when address changes (only for delivery).
+  useEffect(() => {
+    if (orderType !== "Delivery") {
+      setDeliveryQuote(null);
+      return;
+    }
+    const trimmed = (customer.address || "").trim();
+    if (trimmed.length < 4) {
+      setDeliveryQuote(null);
+      return;
+    }
+    const id = setTimeout(async () => {
+      try {
+        setQuoteLoading(true);
+        const quote = await settingsApi.deliveryQuote(trimmed);
+        setDeliveryQuote(quote);
+      } catch (err) {
+        setDeliveryQuote({ deliverable: false, message: err.message || "Could not get delivery quote" });
+      } finally {
+        setQuoteLoading(false);
+      }
+    }, 450);
+    return () => clearTimeout(id);
+  }, [customer.address, orderType]);
+
+  const selectSavedAddress = (address) => {
+    setCustomer({
+      ...customer,
+      address: formatAddress(address),
+      selectedAddressId: address._id,
+    });
+  };
+
+  const deliveryFee = orderType === "Delivery" && deliveryQuote?.deliverable ? Number(deliveryQuote.fee || 0) : 0;
+  const subtotal = total;
+  const grandTotal = subtotal + deliveryFee;
+
+  // Default scheduled time = next opening or now + 30m, formatted as datetime-local.
+  function toDatetimeLocal(date) {
+    const d = new Date(date);
+    const pad = (n) => String(n).padStart(2, "0");
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  }
+  useEffect(() => {
+    if (scheduledFor) return;
+    const base = !isOpen && shopStatus?.nextOpenAt
+      ? new Date(shopStatus.nextOpenAt)
+      : new Date(Date.now() + 30 * 60 * 1000);
+    setScheduledFor(toDatetimeLocal(base));
+  }, [shopStatus, isOpen, scheduledFor]);
+
+  async function submitOrder(e) {
+    e.preventDefault();
+    setError("");
+
+    if (!user) {
+      setCartOpen(false);
+      go("auth");
+      return;
+    }
+
+    // Client-side guards
+    if (!isOpen && (!acceptsScheduled || scheduleMode !== "schedule")) {
+      setError("We are currently closed. Please pre-order for a later time.");
+      return;
+    }
+    if (scheduleMode === "schedule" && !scheduledFor) {
+      setError("Please choose a date and time for your order.");
+      return;
+    }
+    if (orderType === "Delivery") {
+      if (!deliveryQuote?.deliverable) {
+        setError(deliveryQuote?.message || "Please enter a deliverable address.");
+        return;
+      }
+      if (subtotal < minimumOrder) {
+        setError(`Minimum delivery order is £${minimumOrder.toFixed(2)}.`);
+        return;
+      }
+    }
+
+    try {
+      setSubmitting(true);
+      const data = await paymentApi.createCheckoutSession({
+        customerName: customer.name || user?.name,
+        phone: customer.phone || user?.phone,
+        orderType,
+        address: orderType === "Delivery" ? customer.address : null,
+        items: cart.map((item) => ({
+          name: item.name,
+          price: item.price,
+          qty: item.qty,
+          category: item.category,
+        })),
+        notes: customer.notes,
+        scheduledFor: scheduleMode === "schedule" ? new Date(scheduledFor).toISOString() : null,
+      });
+
+      setCheckoutClientSecret(data.clientSecret);
+      setCartOpen(false);
+      go("checkout");
+    } catch (err) {
+      setError(err.message || "Payment could not start.");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  return (
     <div className="fixed inset-0 z-[70] flex justify-end bg-black/70" onClick={() => setCartOpen(false)}>
-      <aside className="h-full w-full max-w-md animate-[slideIn_.24s_ease-out_both] overflow-y-auto bg-[#0d0d0d] p-6 shadow-2xl" onClick={(e) => e.stopPropagation()}>
+      <aside data-testid="cart-drawer" className="h-full w-full max-w-md animate-[slideIn_.24s_ease-out_both] overflow-y-auto bg-[#0d0d0d] p-6 shadow-2xl" onClick={(e) => e.stopPropagation()}>
         <div className="mb-6 flex items-center justify-between">
           <h2 className="font-serif text-3xl font-black">Your Order</h2>
-          <button onClick={() => setCartOpen(false)} className="rounded-full border border-white/10 p-2">
+          <button onClick={() => setCartOpen(false)} className="rounded-full border border-white/10 p-2" data-testid="cart-close-btn">
             <Icon name="x" />
           </button>
         </div>
+
+        {shopStatus && (
+          <div
+            data-testid="cart-shop-status"
+            className={`mb-4 rounded-2xl border p-4 text-sm font-bold ${
+              isOpen
+                ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-200"
+                : "border-amber-500/30 bg-amber-500/10 text-amber-200"
+            }`}
+          >
+            {isOpen ? (
+              <>We're open — your order will be prepared right away.</>
+            ) : (
+              <>
+                <p className="font-black">We're currently closed.</p>
+                {shopStatus.nextOpenAt && (
+                  <p className="mt-1 font-medium">
+                    Next opening: {new Date(shopStatus.nextOpenAt).toLocaleString("en-GB", { weekday: "long", hour: "2-digit", minute: "2-digit" })}
+                  </p>
+                )}
+                {acceptsScheduled && <p className="mt-1 font-medium">You can still pre-order for a later time below.</p>}
+              </>
+            )}
+          </div>
+        )}
 
         {cart.length === 0 ? (
           <div className="rounded-3xl border border-white/10 bg-white/5 p-8 text-center text-white/60">
@@ -1409,9 +1666,23 @@ const selectSavedAddress = (address) => {
               ))}
             </div>
 
-            <div className="my-6 flex items-center justify-between border-t border-white/10 pt-5 text-2xl font-black">
-              <span>Total</span>
-              <span className="text-[#ff5b00]">{formatPrice(total)}</span>
+            <div className="my-6 border-t border-white/10 pt-5 text-base font-bold">
+              <div className="flex justify-between text-white/70">
+                <span>Subtotal</span>
+                <span data-testid="cart-subtotal">{formatPrice(subtotal)}</span>
+              </div>
+              {orderType === "Delivery" && (
+                <div className="mt-2 flex justify-between text-white/70">
+                  <span>Delivery {deliveryQuote?.area ? `(${deliveryQuote.area})` : ""}</span>
+                  <span data-testid="cart-delivery-fee">
+                    {quoteLoading ? "..." : deliveryQuote?.deliverable ? formatPrice(deliveryFee) : "—"}
+                  </span>
+                </div>
+              )}
+              <div className="mt-3 flex items-center justify-between text-2xl font-black">
+                <span>Total</span>
+                <span className="text-[#ff5b00]" data-testid="cart-total">{formatPrice(grandTotal)}</span>
+              </div>
             </div>
 
             {placed ? (
@@ -1419,46 +1690,13 @@ const selectSavedAddress = (address) => {
                 Order placed successfully and saved to database.
               </div>
             ) : (
-             <form
-  onSubmit={async (e) => {
-    e.preventDefault();
-
-    if (!user) {
-      setCartOpen(false);
-      go("auth");
-      return;
-    }
-
-    try {
-      const data = await paymentApi.createCheckoutSession({
-        customerName: customer.name || user?.name,
-        phone: customer.phone || user?.phone,
-        orderType,
-        address: orderType === "Delivery" ? customer.address : null,
-        items: cart.map((item) => ({
-          name: item.name,
-          price: item.price,
-          qty: item.qty,
-          category: item.category,
-        })),
-        total,
-        notes: customer.notes,
-      });
-
-      setCheckoutClientSecret(data.clientSecret);
-      setCartOpen(false);
-      go("checkout");
-    } catch (err) {
-      alert(err.message || "Payment could not start.");
-    }
-  }}
-  className="grid gap-3"
->
+              <form onSubmit={submitOrder} className="grid gap-3" data-testid="cart-form">
                 <div className="grid grid-cols-2 gap-3">
                   {["Collection", "Delivery"].map((type) => (
                     <button
                       type="button"
                       key={type}
+                      data-testid={`order-type-${type.toLowerCase()}`}
                       onClick={() => setOrderType(type)}
                       className={`rounded-full py-3 font-bold ${orderType === type ? "bg-[#ff5b00]" : "bg-white/10"}`}
                     >
@@ -1467,9 +1705,55 @@ const selectSavedAddress = (address) => {
                   ))}
                 </div>
 
+                {/* Schedule selector */}
+                {(isOpen ? acceptsScheduled : true) && (
+                  <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
+                    <p className="mb-3 text-sm font-black text-white">When?</p>
+                    <div className="grid grid-cols-2 gap-2">
+                      <button
+                        type="button"
+                        disabled={!isOpen}
+                        data-testid="schedule-asap"
+                        onClick={() => setScheduleMode("asap")}
+                        className={`rounded-full py-2 text-sm font-bold ${
+                          scheduleMode === "asap" && isOpen
+                            ? "bg-[#ff5b00] text-white"
+                            : "bg-white/10 text-white/60"
+                        } ${!isOpen ? "cursor-not-allowed opacity-40" : ""}`}
+                      >
+                        As soon as possible
+                      </button>
+                      <button
+                        type="button"
+                        data-testid="schedule-later"
+                        disabled={!acceptsScheduled}
+                        onClick={() => setScheduleMode("schedule")}
+                        className={`rounded-full py-2 text-sm font-bold ${
+                          scheduleMode === "schedule"
+                            ? "bg-[#ff5b00] text-white"
+                            : "bg-white/10 text-white/60"
+                        }`}
+                      >
+                        Schedule for later
+                      </button>
+                    </div>
+                    {scheduleMode === "schedule" && (
+                      <input
+                        type="datetime-local"
+                        required
+                        data-testid="schedule-input"
+                        value={scheduledFor}
+                        onChange={(e) => setScheduledFor(e.target.value)}
+                        className="mt-3 w-full rounded-xl border border-white/10 bg-black/40 p-3 text-white outline-none focus:ring-2 focus:ring-[#ff5b00]"
+                      />
+                    )}
+                  </div>
+                )}
+
                 <input
                   required
                   placeholder="Your name"
+                  data-testid="customer-name-input"
                   value={customer.name || user?.name || ""}
                   onChange={(e) => setCustomer({ ...customer, name: e.target.value })}
                   className="rounded-2xl border border-white/10 bg-white/5 p-4 outline-none focus:ring-2 focus:ring-[#ff5b00]"
@@ -1478,80 +1762,82 @@ const selectSavedAddress = (address) => {
                 <input
                   required
                   placeholder="Phone number"
+                  data-testid="customer-phone-input"
                   value={customer.phone || user?.phone || ""}
                   onChange={(e) => setCustomer({ ...customer, phone: e.target.value })}
                   className="rounded-2xl border border-white/10 bg-white/5 p-4 outline-none focus:ring-2 focus:ring-[#ff5b00]"
                 />
 
                 {orderType === "Delivery" && (
-  <div className="grid gap-3">
-    {user && savedDeliveryAddresses.length > 0 && (
-      <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
-        <p className="mb-3 text-sm font-black text-white">
-          Choose saved address
-        </p>
+                  <div className="grid gap-3">
+                    {user && savedDeliveryAddresses.length > 0 && (
+                      <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
+                        <p className="mb-3 text-sm font-black text-white">Choose saved address</p>
+                        <div className="grid gap-3">
+                          {savedDeliveryAddresses.map((address) => {
+                            const fullAddress = formatAddress(address);
+                            const isSelected = customer.selectedAddressId === address._id;
+                            return (
+                              <button
+                                type="button"
+                                key={address._id}
+                                onClick={() => selectSavedAddress(address)}
+                                className={`rounded-xl border p-4 text-left transition ${
+                                  isSelected
+                                    ? "border-[#ff5b00] bg-[#ff5b00]/15"
+                                    : "border-white/10 bg-black/25 hover:border-[#ff5b00]/60"
+                                }`}
+                              >
+                                <div className="flex items-center justify-between gap-3">
+                                  <span className="font-black text-[#ff5b00]">{address.label || "Saved Address"}</span>
+                                  {isSelected && (
+                                    <span className="rounded-full bg-[#ff5b00] px-3 py-1 text-xs font-black text-white">Selected</span>
+                                  )}
+                                </div>
+                                <p className="mt-2 text-sm leading-6 text-white/70">{fullAddress}</p>
+                              </button>
+                            );
+                          })}
+                        </div>
+                        <p className="mt-4 text-xs text-white/45">Or type a different address below.</p>
+                      </div>
+                    )}
 
-        <div className="grid gap-3">
-          {savedDeliveryAddresses.map((address) => {
-            const fullAddress = formatAddress(address);
-            const isSelected = customer.selectedAddressId === address._id;
+                    <input
+                      required
+                      data-testid="delivery-address-input"
+                      placeholder={savedDeliveryAddresses.length > 0 ? "Or enter a different delivery address (include town/postcode)" : "Delivery address (include town/postcode)"}
+                      value={customer.address}
+                      onChange={(e) =>
+                        setCustomer({
+                          ...customer,
+                          address: e.target.value,
+                          selectedAddressId: "",
+                        })
+                      }
+                      className="rounded-2xl border border-white/10 bg-white/5 p-4 outline-none focus:ring-2 focus:ring-[#ff5b00]"
+                    />
 
-            return (
-              <button
-                type="button"
-                key={address._id}
-                onClick={() => selectSavedAddress(address)}
-                className={`rounded-xl border p-4 text-left transition ${
-                  isSelected
-                    ? "border-[#ff5b00] bg-[#ff5b00]/15"
-                    : "border-white/10 bg-black/25 hover:border-[#ff5b00]/60"
-                }`}
-              >
-                <div className="flex items-center justify-between gap-3">
-                  <span className="font-black text-[#ff5b00]">
-                    {address.label || "Saved Address"}
-                  </span>
-
-                  {isSelected && (
-                    <span className="rounded-full bg-[#ff5b00] px-3 py-1 text-xs font-black text-white">
-                      Selected
-                    </span>
-                  )}
-                </div>
-
-                <p className="mt-2 text-sm leading-6 text-white/70">
-                  {fullAddress}
-                </p>
-              </button>
-            );
-          })}
-        </div>
-
-        <p className="mt-4 text-xs text-white/45">
-          Or type a different address below.
-        </p>
-      </div>
-    )}
-
-    <input
-      required
-      placeholder={
-        savedDeliveryAddresses.length > 0
-          ? "Or enter a different delivery address"
-          : "Delivery address"
-      }
-      value={customer.address}
-      onChange={(e) =>
-        setCustomer({
-          ...customer,
-          address: e.target.value,
-          selectedAddressId: "",
-        })
-      }
-      className="rounded-2xl border border-white/10 bg-white/5 p-4 outline-none focus:ring-2 focus:ring-[#ff5b00]"
-    />
-  </div>
-)}
+                    {(customer.address || "").trim().length >= 4 && (
+                      <div
+                        data-testid="delivery-quote-result"
+                        className={`rounded-2xl border p-3 text-sm font-bold ${
+                          quoteLoading
+                            ? "border-white/10 bg-white/5 text-white/60"
+                            : deliveryQuote?.deliverable
+                            ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-200"
+                            : "border-red-500/30 bg-red-500/10 text-red-200"
+                        }`}
+                      >
+                        {quoteLoading
+                          ? "Checking delivery area..."
+                          : deliveryQuote?.deliverable
+                          ? `Delivery to ${deliveryQuote.area}: £${Number(deliveryQuote.fee).toFixed(2)}`
+                          : deliveryQuote?.message || "Address not in our delivery area."}
+                      </div>
+                    )}
+                  </div>
+                )}
 
                 <textarea
                   placeholder="Notes / allergies"
@@ -1560,8 +1846,25 @@ const selectSavedAddress = (address) => {
                   className="min-h-24 rounded-2xl border border-white/10 bg-white/5 p-4 outline-none focus:ring-2 focus:ring-[#ff5b00]"
                 />
 
-                <Button type="submit" className="rounded-full bg-[#ff5b00] py-4 text-lg font-black text-white hover:bg-orange-600">
-                  Place Order
+                {error && (
+                  <p data-testid="cart-error" className="rounded-xl border border-red-500/20 bg-red-500/10 p-3 text-sm font-bold text-red-200">
+                    {error}
+                  </p>
+                )}
+
+                <Button
+                  type="submit"
+                  data-testid="place-order-btn"
+                  disabled={submitting || (!isOpen && (!acceptsScheduled))}
+                  className="rounded-full bg-[#ff5b00] py-4 text-lg font-black text-white hover:bg-orange-600 disabled:cursor-not-allowed disabled:bg-white/10 disabled:text-white/40"
+                >
+                  {submitting
+                    ? "Processing..."
+                    : !isOpen && !acceptsScheduled
+                    ? "Closed - try again later"
+                    : !isOpen
+                    ? "Pre-Order for Later"
+                    : "Place Order"}
                 </Button>
               </form>
             )}

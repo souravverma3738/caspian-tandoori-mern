@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { adminApi } from "../../api";
 
 const statuses = [
@@ -17,32 +17,122 @@ function money(value) {
   return `£${Number(value || 0).toFixed(2)}`;
 }
 
+// Tiny chime synthesised with WebAudio so we don't need any audio file.
+function createRingtone() {
+  let ctx = null;
+  function play() {
+    try {
+      if (!ctx) {
+        const AudioCtx = window.AudioContext || window.webkitAudioContext;
+        if (!AudioCtx) return;
+        ctx = new AudioCtx();
+      }
+      if (ctx.state === "suspended") ctx.resume();
+
+      const now = ctx.currentTime;
+      // Repeat the chime three times so it feels like a phone ring.
+      [0, 0.55, 1.1].forEach((offset) => {
+        [880, 1320].forEach((freq, i) => {
+          const o = ctx.createOscillator();
+          const g = ctx.createGain();
+          o.type = "sine";
+          o.frequency.value = freq;
+          o.connect(g);
+          g.connect(ctx.destination);
+          const start = now + offset + i * 0.18;
+          g.gain.setValueAtTime(0.0001, start);
+          g.gain.exponentialRampToValueAtTime(0.5, start + 0.03);
+          g.gain.exponentialRampToValueAtTime(0.0001, start + 0.35);
+          o.start(start);
+          o.stop(start + 0.4);
+        });
+      });
+    } catch (err) {
+      console.warn("Ringtone failed", err);
+    }
+  }
+  return { play };
+}
+
 export default function AdminOrders() {
   const [orders, setOrders] = useState([]);
   const [status, setStatus] = useState("all");
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [soundOn, setSoundOn] = useState(() => {
+    return localStorage.getItem("caspian_admin_sound") !== "off";
+  });
+  const [newOrderFlash, setNewOrderFlash] = useState(0);
+  const ringtoneRef = useRef(null);
+  const knownOrderIdsRef = useRef(new Set());
+  const initialisedRef = useRef(false);
 
-  async function loadOrders() {
+  if (!ringtoneRef.current) ringtoneRef.current = createRingtone();
+
+  async function loadOrders({ silent = false } = {}) {
     try {
-      setLoading(true);
+      if (!silent) setLoading(true);
       setError("");
-      const data = await adminApi.orders({
-        status,
-        search,
-      });
+      const data = await adminApi.orders({ status, search });
+
+      // Detect new Pending orders that we haven't seen before.
+      if (initialisedRef.current) {
+        const newPending = data.filter(
+          (order) =>
+            order.status === "Pending" && !knownOrderIdsRef.current.has(order._id)
+        );
+        if (newPending.length > 0) {
+          if (soundOn) ringtoneRef.current.play();
+          setNewOrderFlash(newPending.length);
+          // Browser notification (when permission granted)
+          if ("Notification" in window && Notification.permission === "granted") {
+            try {
+              new Notification("New order received!", {
+                body: `${newPending[0].customerName} · £${Number(newPending[0].total).toFixed(2)}`,
+              });
+            } catch {
+              /* ignore */
+            }
+          }
+          setTimeout(() => setNewOrderFlash(0), 8000);
+        }
+      }
+
+      knownOrderIdsRef.current = new Set(data.map((order) => order._id));
+      initialisedRef.current = true;
       setOrders(data);
     } catch (err) {
       setError(err.message || "Could not load orders");
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   }
 
   useEffect(() => {
     loadOrders();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [status]);
+
+  // Poll for new orders every 15 seconds.
+  useEffect(() => {
+    const id = setInterval(() => loadOrders({ silent: true }), 15000);
+    return () => clearInterval(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [status, search, soundOn]);
+
+  function toggleSound() {
+    const next = !soundOn;
+    setSoundOn(next);
+    localStorage.setItem("caspian_admin_sound", next ? "on" : "off");
+    if (next) {
+      // Test sound and warm up the audio context (must be triggered by a click).
+      ringtoneRef.current.play();
+      if ("Notification" in window && Notification.permission === "default") {
+        Notification.requestPermission();
+      }
+    }
+  }
 
   async function updateStatus(orderId, newStatus) {
     try {
@@ -55,12 +145,23 @@ export default function AdminOrders() {
     }
   }
 
+  async function setEstimate(orderId, minutes) {
+    try {
+      const updated = await adminApi.setEstimatedTime(orderId, minutes);
+      setOrders((current) =>
+        current.map((order) => (order._id === updated._id ? updated : order))
+      );
+    } catch (err) {
+      alert(err.message || "Could not update estimate");
+    }
+  }
+
   function printReceipt(order) {
-const addressText =
-  typeof order.address === "string"
-    ? order.address
-    : order.address
-    ? `
+    const addressText =
+      typeof order.address === "string"
+        ? order.address
+        : order.address
+        ? `
 Address:
 ${order.address.label || ""}
 ${order.address.line1 || ""}
@@ -69,7 +170,7 @@ ${order.address.city || ""}
 ${order.address.postcode || ""}
 ${order.address.instructions || ""}
 `
-    : "Address: Not provided";
+        : "Address: Not provided";
     const receipt = `
 Caspian Tandoori
 ------------------------
@@ -84,6 +185,8 @@ ${order.items
   .map((item) => `${item.qty} x ${item.name} - ${money(item.price * item.qty)}`)
   .join("\n")}
 
+Subtotal: ${money(order.subtotal || 0)}
+Delivery: ${money(order.deliveryFee || 0)}
 Total: ${money(order.total)}
 Notes: ${order.notes || "None"}
 `;
@@ -95,13 +198,36 @@ Notes: ${order.notes || "None"}
   }
 
   return (
-    <div>
-      <div className="mb-6">
-        <h2 className="font-serif text-4xl font-black text-white">Orders</h2>
-        <p className="mt-2 text-white/55">
-          View, search, filter, print and update customer orders.
-        </p>
+    <div data-testid="admin-orders">
+      <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h2 className="font-serif text-4xl font-black text-white">Orders</h2>
+          <p className="mt-2 text-white/55">
+            View, search, filter, print and update customer orders. Sound alerts on new orders.
+          </p>
+        </div>
+
+        <button
+          onClick={toggleSound}
+          data-testid="admin-sound-toggle"
+          className={`rounded-full px-5 py-3 text-sm font-black ${
+            soundOn
+              ? "bg-emerald-500/20 text-emerald-200"
+              : "bg-white/10 text-white/60"
+          }`}
+        >
+          {soundOn ? "🔔 Sound on — click to test" : "🔕 Sound off"}
+        </button>
       </div>
+
+      {newOrderFlash > 0 && (
+        <div
+          data-testid="new-order-banner"
+          className="mb-4 animate-pulse rounded-xl border border-emerald-500/40 bg-emerald-500/15 p-4 font-black text-emerald-200"
+        >
+          🛎️ {newOrderFlash} new {newOrderFlash === 1 ? "order" : "orders"} just came in!
+        </div>
+      )}
 
       <div className="mb-6 grid gap-3 lg:grid-cols-[1fr_240px_140px]">
         <input
@@ -124,7 +250,7 @@ Notes: ${order.notes || "None"}
         </select>
 
         <button
-          onClick={loadOrders}
+          onClick={() => loadOrders()}
           className="rounded-xl bg-[#ff5b00] px-5 py-3 font-black text-white"
         >
           Search
@@ -146,6 +272,7 @@ Notes: ${order.notes || "None"}
           {orders.map((order) => (
             <div
               key={order._id}
+              data-testid={`admin-order-${order._id}`}
               className="rounded-2xl border border-white/10 bg-[#101010] p-5"
             >
               <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
@@ -167,12 +294,23 @@ Notes: ${order.notes || "None"}
                   <p className="mt-3 text-sm text-white/45">
                     Order ID: {order._id}
                   </p>
+
+                  {order.scheduledFor && (
+                    <p className="mt-1 rounded-md bg-amber-500/15 px-2 py-1 text-xs font-black text-amber-200">
+                      Scheduled for: {new Date(order.scheduledFor).toLocaleString("en-GB")}
+                    </p>
+                  )}
                 </div>
 
                 <div className="text-left lg:text-right">
                   <p className="text-3xl font-black text-white">
                     {money(order.total)}
                   </p>
+                  {order.deliveryFee > 0 && (
+                    <p className="text-xs text-white/45">
+                      incl. {money(order.deliveryFee)} delivery ({order.deliveryArea})
+                    </p>
+                  )}
                   <p className="mt-1 text-white/50">{order.paymentStatus}</p>
                 </div>
               </div>
@@ -195,23 +333,22 @@ Notes: ${order.notes || "None"}
               </div>
 
               {order.address && (
-  <div className="mt-4 rounded-xl bg-black/40 p-4 text-white/60">
-    <h4 className="mb-2 font-black text-white">Delivery Address</h4>
-
-    {typeof order.address === "string" ? (
-      <p>{order.address}</p>
-    ) : (
-      <>
-        <p>{order.address.label}</p>
-        <p>{order.address.line1}</p>
-        <p>{order.address.line2}</p>
-        <p>{order.address.city}</p>
-        <p>{order.address.postcode}</p>
-        <p>{order.address.instructions}</p>
-      </>
-    )}
-  </div>
-)}
+                <div className="mt-4 rounded-xl bg-black/40 p-4 text-white/60">
+                  <h4 className="mb-2 font-black text-white">Delivery Address</h4>
+                  {typeof order.address === "string" ? (
+                    <p>{order.address}</p>
+                  ) : (
+                    <>
+                      <p>{order.address.label}</p>
+                      <p>{order.address.line1}</p>
+                      <p>{order.address.line2}</p>
+                      <p>{order.address.city}</p>
+                      <p>{order.address.postcode}</p>
+                      <p>{order.address.instructions}</p>
+                    </>
+                  )}
+                </div>
+              )}
 
               {order.notes && (
                 <p className="mt-4 rounded-xl bg-black/40 p-4 text-white/60">
@@ -224,6 +361,7 @@ Notes: ${order.notes || "None"}
                   value={order.status}
                   onChange={(e) => updateStatus(order._id, e.target.value)}
                   className="rounded-xl border border-white/10 bg-black px-4 py-3 text-white outline-none"
+                  data-testid={`status-select-${order._id}`}
                 >
                   {statuses
                     .filter((item) => item !== "all")
@@ -234,7 +372,7 @@ Notes: ${order.notes || "None"}
                     ))}
                 </select>
 
-                <div className="flex gap-3">
+                <div className="flex flex-wrap gap-3">
                   <button
                     onClick={() => updateStatus(order._id, "Accepted")}
                     className="rounded-xl bg-green-600 px-4 py-3 font-black text-white"
@@ -256,6 +394,29 @@ Notes: ${order.notes || "None"}
                     Print
                   </button>
                 </div>
+              </div>
+
+              <div className="mt-4 flex flex-wrap items-center gap-2 rounded-xl bg-black/40 p-3 text-sm">
+                <span className="font-bold text-white/65">Estimated time:</span>
+                {[15, 30, 45, 60, 90].map((m) => (
+                  <button
+                    key={m}
+                    onClick={() => setEstimate(order._id, m)}
+                    data-testid={`eta-${order._id}-${m}`}
+                    className={`rounded-full px-3 py-1 font-bold ${
+                      order.estimatedMinutes === m
+                        ? "bg-[#ff5b00] text-white"
+                        : "bg-white/10 text-white/60 hover:bg-white/20"
+                    }`}
+                  >
+                    {m}m
+                  </button>
+                ))}
+                {order.estimatedReadyAt && (
+                  <span className="ml-2 text-white/55">
+                    Ready by {new Date(order.estimatedReadyAt).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })}
+                  </span>
+                )}
               </div>
             </div>
           ))}

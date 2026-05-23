@@ -82,9 +82,43 @@ router.patch("/orders/:id/status", async (req, res) => {
     return res.status(400).json({ message: "Invalid order status" });
   }
 
+  const existing = await Order.findById(req.params.id);
+  if (!existing) return res.status(404).json({ message: "Order not found" });
+
+  const update = { status };
+
+  // Auto-calculate estimated ready time when the order is first accepted.
+  if (status === "Accepted" && !existing.estimatedReadyAt) {
+    let settings = await RestaurantSettings.findOne();
+    if (!settings) settings = await RestaurantSettings.create({});
+    const minutes = existing.orderType === "Delivery"
+      ? Number(settings.defaultDeliveryMinutes || 45)
+      : Number(settings.defaultPrepMinutes || 30);
+    update.estimatedMinutes = minutes;
+    update.estimatedReadyAt = new Date(Date.now() + minutes * 60 * 1000);
+  }
+
   const order = await Order.findByIdAndUpdate(
     req.params.id,
-    { status },
+    update,
+    { new: true }
+  ).populate("user", "name email phone");
+
+  res.json(order);
+});
+
+router.patch("/orders/:id/estimate", async (req, res) => {
+  const minutes = Number(req.body?.minutes);
+  if (!minutes || minutes < 1 || minutes > 240) {
+    return res.status(400).json({ message: "Estimated minutes must be between 1 and 240" });
+  }
+
+  const order = await Order.findByIdAndUpdate(
+    req.params.id,
+    {
+      estimatedMinutes: minutes,
+      estimatedReadyAt: new Date(Date.now() + minutes * 60 * 1000),
+    },
     { new: true }
   ).populate("user", "name email phone");
 
