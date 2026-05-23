@@ -867,12 +867,18 @@ function AuthPage({ authMode, setAuthMode, setUser, setAddresses, go }) {
           password: form.password,
         });
 
+    if (!data?.token || !data?.user) {
+      return setError("Server returned an unexpected response. Please contact support.");
+    }
+
     setSession(data.token, data.user);
     setUser(data.user);
-    go("profile");
+    setAddresses(data.user.addresses || []);
+    go(data.user.role === "admin" ? "admin" : "profile");
 
   } catch (err) {
-    setError(err.message);
+    console.error("Auth error:", err);
+    setError(err.message || "Could not sign in. Please try again.");
   }
 }
  async function googleAuth() {
