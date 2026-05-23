@@ -149,4 +149,37 @@ router.post("/create-checkout-session", auth, async (req, res) => {
   }
 });
 
+// Verify a Stripe Checkout session and update the order accordingly.
+// Used as a fallback when the Stripe webhook is not configured, or to confirm
+// payment immediately after the customer returns from Stripe.
+router.get("/verify-session/:sessionId", auth, async (req, res) => {
+  try {
+    const { sessionId } = req.params;
+    if (!sessionId) return res.status(400).json({ message: "Missing session id" });
+
+    const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
+    const session = await stripe.checkout.sessions.retrieve(sessionId);
+
+    const order = await Order.findOne({ stripeSessionId: sessionId });
+    if (!order) return res.status(404).json({ message: "Order not found" });
+
+    if (session.payment_status === "paid" && order.paymentStatus !== "Paid") {
+      order.paymentStatus = "Paid";
+      if (order.status === "Pending Payment") order.status = "Pending";
+      if (session.payment_intent) order.stripePaymentIntentId = String(session.payment_intent);
+      await order.save();
+    } else if (session.status === "expired" || session.payment_status === "unpaid") {
+      // Leave the order as-is; do not mark as failed automatically.
+    }
+
+    res.json({
+      paymentStatus: order.paymentStatus,
+      status: order.status,
+      orderId: order._id,
+    });
+  } catch (err) {
+    res.status(500).json({ message: err.message || "Could not verify payment" });
+  }
+});
+
 export default router;

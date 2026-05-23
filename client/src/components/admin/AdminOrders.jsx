@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { adminApi } from "../../api";
+import { adminApi, paymentApi } from "../../api";
 
 const statuses = [
   "all",
@@ -67,8 +67,26 @@ export default function AdminOrders() {
   const ringtoneRef = useRef(null);
   const knownOrderIdsRef = useRef(new Set());
   const initialisedRef = useRef(false);
+  const continuousRingRef = useRef(null);
 
   if (!ringtoneRef.current) ringtoneRef.current = createRingtone();
+
+  // Ring continuously every 8s while there's any un-accepted "Pending" order.
+  useEffect(() => {
+    const pendingCount = orders.filter((o) => o.status === "Pending").length;
+    if (continuousRingRef.current) {
+      clearInterval(continuousRingRef.current);
+      continuousRingRef.current = null;
+    }
+    if (pendingCount > 0 && soundOn) {
+      continuousRingRef.current = setInterval(() => {
+        ringtoneRef.current.play();
+      }, 8000);
+    }
+    return () => {
+      if (continuousRingRef.current) clearInterval(continuousRingRef.current);
+    };
+  }, [orders, soundOn]);
 
   async function loadOrders({ silent = false } = {}) {
     try {
@@ -153,6 +171,19 @@ export default function AdminOrders() {
       );
     } catch (err) {
       alert(err.message || "Could not update estimate");
+    }
+  }
+
+  async function recheckPayment(order) {
+    if (!order.stripeSessionId) {
+      alert("This order has no Stripe session linked.");
+      return;
+    }
+    try {
+      await paymentApi.verifySession(order.stripeSessionId);
+      await loadOrders();
+    } catch (err) {
+      alert(err.message || "Could not verify payment");
     }
   }
 
@@ -300,6 +331,25 @@ Notes: ${order.notes || "None"}
                       Scheduled for: {new Date(order.scheduledFor).toLocaleString("en-GB")}
                     </p>
                   )}
+
+                  <p
+                    className={`mt-2 inline-block rounded-full px-3 py-1 text-xs font-black uppercase tracking-wider ${
+                      order.status === "Pending"
+                        ? "bg-amber-500/20 text-amber-200"
+                        : order.status === "Accepted" || order.status === "Preparing"
+                        ? "bg-sky-500/20 text-sky-200"
+                        : order.status === "Ready" || order.status === "Out for delivery"
+                        ? "bg-indigo-500/20 text-indigo-200"
+                        : order.status === "Completed" || order.status === "Delivered"
+                        ? "bg-emerald-500/20 text-emerald-200"
+                        : order.status === "Cancelled"
+                        ? "bg-red-500/20 text-red-200"
+                        : "bg-white/10 text-white/60"
+                    }`}
+                    data-testid={`workflow-status-${order._id}`}
+                  >
+                    {order.status === "Pending" ? "🆕 New — needs accept" : order.status}
+                  </p>
                 </div>
 
                 <div className="text-left lg:text-right">
@@ -311,7 +361,18 @@ Notes: ${order.notes || "None"}
                       incl. {money(order.deliveryFee)} delivery ({order.deliveryArea})
                     </p>
                   )}
-                  <p className="mt-1 text-white/50">{order.paymentStatus}</p>
+                  <p
+                    className={`mt-2 inline-block rounded-full px-3 py-1 text-xs font-black ${
+                      order.paymentStatus === "Paid"
+                        ? "bg-emerald-500/20 text-emerald-200"
+                        : order.paymentStatus === "Failed" || order.paymentStatus === "Refunded"
+                        ? "bg-red-500/20 text-red-200"
+                        : "bg-amber-500/20 text-amber-200"
+                    }`}
+                    data-testid={`payment-status-${order._id}`}
+                  >
+                    {order.paymentStatus === "Paid" ? "✓ PAID" : `Payment: ${order.paymentStatus || "Pending"}`}
+                  </p>
                 </div>
               </div>
 
@@ -393,6 +454,16 @@ Notes: ${order.notes || "None"}
                   >
                     Print
                   </button>
+
+                  {order.paymentStatus !== "Paid" && order.stripeSessionId && (
+                    <button
+                      onClick={() => recheckPayment(order)}
+                      data-testid={`recheck-payment-${order._id}`}
+                      className="rounded-xl border border-emerald-500/40 bg-emerald-500/10 px-4 py-3 font-black text-emerald-200"
+                    >
+                      Re-check payment
+                    </button>
+                  )}
                 </div>
               </div>
 

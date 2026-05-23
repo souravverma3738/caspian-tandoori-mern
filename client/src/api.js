@@ -127,6 +127,12 @@ export const paymentApi = {
       method: "POST",
       body: JSON.stringify(payload),
     }),
+  verifySession: (sessionId) =>
+    apiRequest(`/payments/verify-session/${encodeURIComponent(sessionId)}`),
+};
+
+export const adminPaymentApi = {
+  verifySession: paymentApi.verifySession,
 };
 export const settingsApi = {
   get: () => apiRequest("/settings"),

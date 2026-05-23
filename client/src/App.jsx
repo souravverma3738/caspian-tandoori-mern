@@ -109,6 +109,24 @@ useEffect(() => {
 useEffect(() => {
   settingsApi.get().then(setSettings).catch(console.error);
 }, []);
+
+// Detect Stripe return and verify the session (fallback for missing webhook).
+useEffect(() => {
+  const params = new URLSearchParams(window.location.search);
+  const sessionId = params.get("session_id");
+  if (!sessionId) return;
+
+  paymentApi
+    .verifySession(sessionId)
+    .catch((err) => console.error("Could not verify Stripe session:", err))
+    .finally(() => {
+      // Clean the URL so refreshes don't re-trigger.
+      window.history.replaceState({}, "", window.location.pathname);
+      setPage("profile");
+      setCart([]);
+      setPlaced(true);
+    });
+}, []);
 const [shopStatus, setShopStatus] = useState(null);
 useEffect(() => {
   let cancelled = false;
