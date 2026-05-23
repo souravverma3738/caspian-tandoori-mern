@@ -66,6 +66,14 @@ async function getOrCreateSettings() {
     settings.markModified("deliveryZones");
     await settings.save();
   }
+
+  // One-time migration: clear legacy minimum order requirement.
+  if ((settings.migrationVersion || 0) < 1) {
+    settings.minimumOrder = 0;
+    settings.migrationVersion = 1;
+    await settings.save();
+  }
+
   return settings;
 }
 

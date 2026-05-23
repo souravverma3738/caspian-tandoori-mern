@@ -3,6 +3,7 @@ import { adminApi, paymentApi } from "../../api";
 
 const statuses = [
   "all",
+  "Pending Payment",
   "Pending",
   "Accepted",
   "Preparing",
@@ -304,7 +305,11 @@ Notes: ${order.notes || "None"}
             <div
               key={order._id}
               data-testid={`admin-order-${order._id}`}
-              className="rounded-2xl border border-white/10 bg-[#101010] p-5"
+              className={`rounded-2xl border border-white/10 p-5 ${
+                order.status === "Pending Payment"
+                  ? "bg-[#0a0a0a] opacity-60"
+                  : "bg-[#101010]"
+              }`}
             >
               <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
                 <div>
@@ -334,7 +339,9 @@ Notes: ${order.notes || "None"}
 
                   <p
                     className={`mt-2 inline-block rounded-full px-3 py-1 text-xs font-black uppercase tracking-wider ${
-                      order.status === "Pending"
+                      order.status === "Pending Payment"
+                        ? "bg-white/10 text-white/50"
+                        : order.status === "Pending"
                         ? "bg-amber-500/20 text-amber-200"
                         : order.status === "Accepted" || order.status === "Preparing"
                         ? "bg-sky-500/20 text-sky-200"
@@ -348,7 +355,11 @@ Notes: ${order.notes || "None"}
                     }`}
                     data-testid={`workflow-status-${order._id}`}
                   >
-                    {order.status === "Pending" ? "🆕 New — needs accept" : order.status}
+                    {order.status === "Pending"
+                      ? "🆕 New — needs accept"
+                      : order.status === "Pending Payment"
+                      ? "Awaiting payment / abandoned"
+                      : order.status}
                   </p>
                 </div>
 

@@ -48,14 +48,11 @@ router.get("/dashboard", async (req, res) => {
   });
 });
 router.get("/orders", async (req, res) => {
-  const { status, search, includeUnpaid } = req.query;
+  const { status, search } = req.query;
 
   const query = {};
   if (status && status !== "all") {
     query.status = status;
-  } else if (!includeUnpaid || includeUnpaid === "false") {
-    // Hide unpaid / abandoned-checkout orders from the admin dashboard by default.
-    query.status = { $ne: "Pending Payment" };
   }
 
   if (search) {

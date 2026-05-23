@@ -52,7 +52,9 @@ const restaurantSettingsSchema = new mongoose.Schema(
 
     deliveryZonesText: { type: String, default: "Kelty, Cowdenbeath, Kinross, Lochgelly, Ballingry, Cardenden" },
     deliveryFee: { type: Number, default: 3.0 },
-    minimumOrder: { type: Number, default: 12 },
+    minimumOrder: { type: Number, default: 0 },
+
+    migrationVersion: { type: Number, default: 0 },
 
     defaultPrepMinutes: { type: Number, default: 30 },
     defaultDeliveryMinutes: { type: Number, default: 45 },
