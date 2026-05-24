@@ -490,11 +490,13 @@ useEffect(() => {
       setPlaced(true);
     });
 }, []);
+
 useEffect(() => {
   window.addEventListener("beforeinstallprompt", (e) => {
     e.preventDefault();
   });
 }, []);
+
 useEffect(() => {
   if (window.location.pathname === "/admin") {
     setPage("admin-login");
