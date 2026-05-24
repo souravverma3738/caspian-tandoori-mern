@@ -388,7 +388,7 @@ function Card({ children, className = "" }) { return <div className={`rounded-2x
 function CardContent({ children, className = "" }) { return <div className={className}>{children}</div>; }
 
 export default function CaspianTakeawayWebsite() {
- const [page, setPage] = useState("admin-login");
+const [page, setPage] = useState("home");
   const [mobileOpen, setMobileOpen] = useState(false);
   const [cartOpen, setCartOpen] = useState(false);
   const [cart, setCart] = useState([]);
@@ -490,6 +490,15 @@ useEffect(() => {
       setPlaced(true);
     });
 }, []);
+
+
+useEffect(() => {
+  if (window.location.pathname === "/admin") {
+    setPage("admin-login");
+  }
+}, []);
+
+
 const [shopStatus, setShopStatus] = useState(null);
 useEffect(() => {
   let cancelled = false;
@@ -524,11 +533,10 @@ if (authLoading) {
         {page === "contact" && <ContactPage contactSent={contactSent} setContactSent={setContactSent} settings={settings} />}
         {page === "auth" && <AuthPage authMode={authMode} setAuthMode={setAuthMode} setUser={setUser} setAddresses={setAddresses} go={go} />}
         {page === "profile" && <ProfilePage user={user} setUser={setUser} addresses={addresses} setAddresses={setAddresses} go={go} setAuthMode={setAuthMode} />}
-       {page === "admin-login" && (
-  <AdminLogin go={go} />
+{page === "admin-login" && (
+  <AdminLogin go={go} setUser={setUser} />
 )}
-
-        {page === "admin" && (
+ {page === "admin" && (
   <AdminDashboard
     user={user}
     go={go}

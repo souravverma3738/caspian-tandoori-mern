@@ -17,7 +17,7 @@ function AdminDashboard({ user, go }) {
       <section className="mx-auto max-w-4xl px-5 pb-24 pt-40 text-center">
         <h1 className="font-serif text-5xl font-black">Admin Login Required</h1>
         <button
-          onClick={() => go("auth")}
+          onClick={() => go("admin-login")}
           className="mt-8 rounded-full bg-[#ff5b00] px-8 py-4 font-black text-white"
         >
           Sign In
