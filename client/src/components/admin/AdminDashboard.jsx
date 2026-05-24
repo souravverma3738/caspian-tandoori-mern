@@ -10,6 +10,7 @@ import AdminSettings from "./AdminSettings";
 function AdminDashboard({ user, go }) {
   const [activeTab, setActiveTab] = useState("dashboard");
   const [installPrompt, setInstallPrompt] = useState(null);
+  const [installed, setInstalled] = useState(false);
 
   useEffect(() => {
     const handler = (e) => {
@@ -17,8 +18,24 @@ function AdminDashboard({ user, go }) {
       setInstallPrompt(e);
     };
     window.addEventListener("beforeinstallprompt", handler);
+
+    window.addEventListener("appinstalled", () => {
+      setInstalled(true);
+      setInstallPrompt(null);
+    });
+
     return () => window.removeEventListener("beforeinstallprompt", handler);
   }, []);
+
+  async function handleInstall() {
+    if (!installPrompt) return;
+    installPrompt.prompt();
+    const { outcome } = await installPrompt.userChoice;
+    if (outcome === "accepted") {
+      setInstalled(true);
+      setInstallPrompt(null);
+    }
+  }
 
   if (!user || user.role !== "admin") {
     go("admin-login");
@@ -37,7 +54,7 @@ function AdminDashboard({ user, go }) {
 
   return (
     <section className="mx-auto max-w-7xl px-5 pb-24 pt-40 lg:px-8">
-      <div className="mb-10 flex items-start justify-between">
+      <div className="mb-10 flex flex-col gap-5 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <p className="mb-3 text-sm font-black uppercase tracking-[0.35em] text-[#ff5b00]">
             Admin Panel
@@ -48,14 +65,25 @@ function AdminDashboard({ user, go }) {
           </p>
         </div>
 
-        {installPrompt && (
-          <button
-            onClick={() => installPrompt.prompt()}
-            className="rounded-full bg-[#ff5b00] px-6 py-3 font-black text-white"
-          >
-            📲 Install Admin App
-          </button>
-        )}
+        <div className="flex flex-col items-start gap-3 sm:items-end">
+          {installed ? (
+            <div className="rounded-full border border-emerald-500/30 bg-emerald-500/10 px-5 py-3 text-sm font-black text-emerald-200">
+              ✓ App installed
+            </div>
+          ) : installPrompt ? (
+            <button
+              onClick={handleInstall}
+              className="flex items-center gap-2 rounded-full bg-[#ff5b00] px-6 py-3 font-black text-white shadow-lg shadow-orange-500/20 transition hover:bg-orange-600 active:scale-95"
+            >
+              <span className="text-lg">📲</span>
+              Install Admin App
+            </button>
+          ) : (
+            <div className="rounded-full border border-white/10 bg-white/5 px-5 py-3 text-sm font-bold text-white/40">
+              Open in browser to install
+            </div>
+          )}
+        </div>
       </div>
 
       <div className="grid gap-6 lg:grid-cols-[260px_1fr]">
