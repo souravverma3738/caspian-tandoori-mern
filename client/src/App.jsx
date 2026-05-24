@@ -72,12 +72,28 @@ const categories = [
     ["Donner Supreme Calzone", 11.5, "Chicken pakora, donner and spicy onions."],
     ["Any Curry Calzone", 11.95, "Choose chicken korma, bhuna masala, garlic chilli, madras or donner."],
   ] },
-  { id: "burgers", name: "Grilled Burgers", items: [
+ {
+  id: "burgers",
+  name: "Grilled Burgers",
+  items: [
+    ["Chicken Burger", 3.5, "Grilled chicken burger served with salad and sauce."],
+    ["Plain Burger", 3.5, "Classic plain burger served with salad and sauce."],
+    ["Cheese Burger", 4.0, "Cheeseburger served with salad and sauce."],
+    ["Spicy Zinger Burger", 4.5, "Spicy zinger chicken burger served with salad and sauce."],
+    ["Texan Burger", 5.0, "Cheeseburger with onion rings and donner meat."],
+    ["Peri Peri Burger", 4.5, "Peri peri style grilled burger served with salad and sauce."],
+    ["Big Bite Burger", 5.5, "Cheeseburger with chicken, hash brown and donner meat."],
+    ["Mexican Volcano", 5.5, "Cheeseburger with spicy chicken, jalapenos and pepperoni."],
+    ["Tower Burger", 5.5, "Cheeseburger with chicken, hash brown and curry sauce."],
+    ["Daddy Burger", 5.5, "Cheeseburger with chicken, onion rings and donner meat."],
+    ["New York Burger", 5.5, "Cheeseburger with fried onions and fried mushrooms."],
+    ["Caspian Special Burger", 5.5, "Double cheeseburger with fried onions, mushrooms, peppers and cooked pepperoni."],
+    ["Special Burger", 5.5, "Cheeseburger with chicken shawarma, salad and sauce."],
     ["Roll Donner Tikka Burger", 4.0, "Donner tikka in a soft roll."],
     ["Roll Chicken Tikka Burger", 4.0, "Chicken tikka in a soft roll."],
-    ["Omelette Burger", 5.0, "Cheeseburger with cheese omelette."],
-    ["Special Burger", 5.5, "Cheeseburger with chicken shawarma, salad and sauce."],
-  ] },
+    ["Omelette Burger", 5.0, "Cheeseburger with cheese omelette."]
+  ]
+},
   { id: "naankebabs", name: "Naan Kebabs", items: [
     ["Donner Kebab (Naan)", 11.0, "Donner on naan with salad and chilli sauce."],
     ["Chicken Shawarma BBQ Kebab", 12.0, "Chicken shawarma BBQ kebab on naan."],
