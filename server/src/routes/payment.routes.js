@@ -129,7 +129,7 @@ router.post("/create-checkout-session", auth, async (req, res) => {
 
     const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
     const session = await stripe.checkout.sessions.create({
-      ui_mode: "embedded",
+      ui_mode: "embedded_page",
       mode: "payment",
       payment_method_types: ["card"],
       line_items: lineItems,
