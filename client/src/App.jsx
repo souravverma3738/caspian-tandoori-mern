@@ -15,7 +15,7 @@ import { firebaseAuth, googleProvider } from "./firebase";
 import { loadStripe } from "@stripe/stripe-js";
 import { EmbeddedCheckout, EmbeddedCheckoutProvider } from "@stripe/react-stripe-js";
 import AdminDashboard from "./components/admin/AdminDashboard";
-
+import axios from "axios";
 const stripePromise = loadStripe(import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY);
 const categories = [
   { id: "pizza", name: "Pizzas", items: [
@@ -406,7 +406,6 @@ export default function CaspianTakeawayWebsite() {
   const total = calculateCartTotal(cart);
   const count = cart.reduce((sum, item) => sum + item.qty, 0);
   const go = (next) => { setPage(next); setMobileOpen(false); window.scrollTo({ top: 0, behavior: "smooth" }); };
-
  const addToCart = (item) => {
   setCart((prev) => addItemToCart(prev, item));
   setPlaced(false);
@@ -415,6 +414,35 @@ export default function CaspianTakeawayWebsite() {
   const [checkoutClientSecret, setCheckoutClientSecret] = useState(null);
   const [settings, setSettings] = useState(null);
 const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+const [theme, setTheme] = useState("dark");
+
+useEffect(() => {
+  const verifyPayment = async () => {
+    try {
+      const params = new URLSearchParams(window.location.search);
+      const sessionId = params.get("session_id");
+
+      if (!sessionId) return;
+
+      const token = localStorage.getItem("token");
+
+      await axios.get(
+        `${import.meta.env.VITE_API_URL}/api/payments/verify-session/${sessionId}`,
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        }
+      );
+
+      console.log("Payment verified");
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  verifyPayment();
+}, []);
 useEffect(() => {
   async function restoreLogin() {
     const storedUser = getStoredUser();
