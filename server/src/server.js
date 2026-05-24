@@ -22,14 +22,13 @@ app.use(cors({ origin: process.env.CLIENT_URL, credentials: true }));
 app.use(express.json());
 
 async function getOrCreateSettings() {
+  const Collection = RestaurantSettings.collection;
   let settings = await RestaurantSettings.findOne();
   if (!settings) {
     settings = await RestaurantSettings.create({});
     return settings;
   }
 
-  // Migrate legacy data shape (string opening hours / string delivery zones).
-  let needsSave = false;
   const dayKeys = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"];
   const defaultHours = {
     monday: { open: "16:00", close: "00:00", closed: false },
@@ -40,38 +39,46 @@ async function getOrCreateSettings() {
     saturday: { open: "16:00", close: "01:00", closed: false },
     sunday: { open: "16:00", close: "00:00", closed: false },
   };
-  for (const day of dayKeys) {
-    const value = settings.openingHours?.[day];
-    if (!value || typeof value !== "object" || !value.open || !value.close) {
-      settings.openingHours = settings.openingHours || {};
-      settings.openingHours[day] = defaultHours[day];
-      needsSave = true;
+  const defaultZones = [
+    { area: "Cowdenbeath", fee: 3.5, keywords: ["cowdenbeath", "ky4 9"] },
+    { area: "Kelty", fee: 3.0, keywords: ["kelty", "ky4 0"] },
+    { area: "Kinross", fee: 6.5, keywords: ["kinross", "ky13"] },
+    { area: "Lochgelly", fee: 6.5, keywords: ["lochgelly", "ky5 9"] },
+    { area: "Ballingry", fee: 6.5, keywords: ["ballingry", "ky5 8"] },
+    { area: "Cardenden", fee: 6.5, keywords: ["cardenden", "ky5 0"] },
+  ];
+
+  // Read the raw document (bypassing Mongoose casting) so we can detect legacy shapes.
+  const raw = await Collection.findOne({ _id: settings._id });
+
+  const ohBroken =
+    !raw?.openingHours ||
+    typeof raw.openingHours !== "object" ||
+    dayKeys.some((d) => {
+      const v = raw.openingHours?.[d];
+      return !v || typeof v !== "object" || !v.open || !v.close;
+    });
+
+  const dzBroken =
+    !Array.isArray(raw?.deliveryZones) ||
+    raw.deliveryZones.length === 0 ||
+    typeof raw.deliveryZones[0] !== "object" ||
+    !raw.deliveryZones[0].area;
+
+  const v1Needed = (raw?.migrationVersion || 0) < 1;
+
+  if (ohBroken || dzBroken || v1Needed) {
+    const updates = {};
+    if (ohBroken) updates.openingHours = defaultHours;
+    if (dzBroken) updates.deliveryZones = defaultZones;
+    if (v1Needed) {
+      updates.minimumOrder = 0;
+      updates.migrationVersion = 1;
     }
-  }
 
-  if (!Array.isArray(settings.deliveryZones) || settings.deliveryZones.length === 0) {
-    settings.deliveryZones = [
-      { area: "Cowdenbeath", fee: 3.5, keywords: ["cowdenbeath", "ky4 9"] },
-      { area: "Kelty", fee: 3.0, keywords: ["kelty", "ky4 0"] },
-      { area: "Kinross", fee: 6.5, keywords: ["kinross", "ky13"] },
-      { area: "Lochgelly", fee: 6.5, keywords: ["lochgelly", "ky5 9"] },
-      { area: "Ballingry", fee: 6.5, keywords: ["ballingry", "ky5 8"] },
-      { area: "Cardenden", fee: 6.5, keywords: ["cardenden", "ky5 0"] },
-    ];
-    needsSave = true;
-  }
-
-  if (needsSave) {
-    settings.markModified("openingHours");
-    settings.markModified("deliveryZones");
-    await settings.save();
-  }
-
-  // One-time migration: clear legacy minimum order requirement.
-  if ((settings.migrationVersion || 0) < 1) {
-    settings.minimumOrder = 0;
-    settings.migrationVersion = 1;
-    await settings.save();
+    // Use the native driver to bypass Mongoose casting rejections.
+    await Collection.updateOne({ _id: settings._id }, { $set: updates });
+    settings = await RestaurantSettings.findOne();
   }
 
   return settings;
@@ -82,31 +89,56 @@ app.get("/api/health", (req, res) => {
 });
 
 app.get("/api/settings", async (req, res) => {
-  const settings = await getOrCreateSettings();
-  res.json(settings);
+  try {
+    const settings = await getOrCreateSettings();
+    res.json(settings);
+  } catch (err) {
+    console.error("[GET /api/settings] failed:", err);
+    res.status(500).json({ message: err.message || "Could not load settings" });
+  }
 });
 
 app.get("/api/settings/shop-status", async (req, res) => {
-  const settings = await getOrCreateSettings();
-  const status = getShopStatus(settings);
-  res.json({
-    isOpen: status.isOpen,
-    opensAt: status.opensAt,
-    closesAt: status.closesAt,
-    nextOpenAt: status.nextOpenAt,
-    acceptScheduledOrders: settings.acceptScheduledOrders,
-    openingHours: settings.openingHours,
-    serverTime: new Date(),
-  });
+  try {
+    const settings = await getOrCreateSettings();
+    const status = getShopStatus(settings);
+    res.json({
+      isOpen: status.isOpen,
+      opensAt: status.opensAt,
+      closesAt: status.closesAt,
+      nextOpenAt: status.nextOpenAt,
+      acceptScheduledOrders: settings.acceptScheduledOrders,
+      openingHours: settings.openingHours,
+      serverTime: new Date(),
+    });
+  } catch (err) {
+    console.error("[GET /api/settings/shop-status] failed:", err);
+    // Safe fallback so the front-end keeps working even if settings are broken.
+    res.json({
+      isOpen: false,
+      opensAt: null,
+      closesAt: null,
+      nextOpenAt: null,
+      acceptScheduledOrders: true,
+      openingHours: {},
+      serverTime: new Date(),
+      error: err.message,
+    });
+  }
 });
 
 app.post("/api/settings/delivery-quote", async (req, res) => {
-  const settings = await getOrCreateSettings();
-  const quote = quoteDelivery(settings, req.body?.address || "");
-  res.json({
-    ...quote,
-    minimumOrder: settings.minimumOrder || 0,
-  });
+  try {
+    const settings = await getOrCreateSettings();
+    const quote = quoteDelivery(settings, req.body?.address || "");
+    res.json({
+      ...quote,
+      minimumOrder: settings.minimumOrder || 0,
+    });
+  } catch (err) {
+    console.error("[POST /api/settings/delivery-quote] failed:", err);
+    res.status(500).json({ message: err.message || "Could not get delivery quote" });
+  }
 });
 
 app.use("/api/admin", adminRoutes);
