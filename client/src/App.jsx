@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
+import AdminLogin from "./components/admin/AdminLogin";
 import {
   authApi,
   setSession,
@@ -387,7 +388,7 @@ function Card({ children, className = "" }) { return <div className={`rounded-2x
 function CardContent({ children, className = "" }) { return <div className={className}>{children}</div>; }
 
 export default function CaspianTakeawayWebsite() {
-  const [page, setPage] = useState("home");
+ const [page, setPage] = useState("admin-login");
   const [mobileOpen, setMobileOpen] = useState(false);
   const [cartOpen, setCartOpen] = useState(false);
   const [cart, setCart] = useState([]);
@@ -523,6 +524,10 @@ if (authLoading) {
         {page === "contact" && <ContactPage contactSent={contactSent} setContactSent={setContactSent} settings={settings} />}
         {page === "auth" && <AuthPage authMode={authMode} setAuthMode={setAuthMode} setUser={setUser} setAddresses={setAddresses} go={go} />}
         {page === "profile" && <ProfilePage user={user} setUser={setUser} addresses={addresses} setAddresses={setAddresses} go={go} setAuthMode={setAuthMode} />}
+       {page === "admin-login" && (
+  <AdminLogin go={go} />
+)}
+
         {page === "admin" && (
   <AdminDashboard
     user={user}
