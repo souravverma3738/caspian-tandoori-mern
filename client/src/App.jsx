@@ -490,23 +490,11 @@ useEffect(() => {
       setPlaced(true);
     });
 }, []);
-
 useEffect(() => {
-  let deferredPrompt;
-
-  const handler = (e) => {
+  window.addEventListener("beforeinstallprompt", (e) => {
     e.preventDefault();
-    deferredPrompt = e;
-
-    // Only show install prompt if user is admin
-    if (user?.role === "admin" || page === "admin") {
-      deferredPrompt.prompt();
-    }
-  };
-
-  window.addEventListener("beforeinstallprompt", handler);
-  return () => window.removeEventListener("beforeinstallprompt", handler);
-}, [user, page]);
+  });
+}, []);
 useEffect(() => {
   if (window.location.pathname === "/admin") {
     setPage("admin-login");
