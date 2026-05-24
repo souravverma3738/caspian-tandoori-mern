@@ -20,7 +20,7 @@ import axios from "axios";
 const stripePromise = loadStripe(import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY);
 const categories = [
   { id: "pizza", name: "Pizzas", items: [
-    ["Margherita Pizza", 6.5, "With pizza sauce & mozzarella cheese."],
+    ["Margherita Pizza", 0, "With pizza sauce & mozzarella cheese."],
     ["Vegetarian Pizza", 8.0, "Onions, peppers, mushroom, sweetcorn and tomatoes."],
     ["Slick Chick Pizza", 8.5, "Chicken shawarma, pepperoni, chicken and green chillies."],
     ["Donner Double Pizza", 8.95, "Double portion of donner meat."],
