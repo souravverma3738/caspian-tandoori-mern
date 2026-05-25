@@ -18,6 +18,32 @@ function money(value) {
   return `£${Number(value || 0).toFixed(2)}`;
 }
 
+function formatOrderTime(dateString) {
+  if (!dateString) return "";
+  const date = new Date(dateString);
+  return date.toLocaleString("en-GB", {
+    weekday: "short",
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: false,
+  });
+}
+
+function timeAgo(dateString) {
+  if (!dateString) return "";
+  const diffMs = Date.now() - new Date(dateString).getTime();
+  const diffMins = Math.floor(diffMs / 60000);
+  if (diffMins < 1) return "just now";
+  if (diffMins < 60) return `${diffMins}m ago`;
+  const diffHrs = Math.floor(diffMins / 60);
+  if (diffHrs < 24) return `${diffHrs}h ago`;
+  return `${Math.floor(diffHrs / 24)}d ago`;
+}
+
 // Tiny chime synthesised with WebAudio so we don't need any audio file.
 function createRingtone() {
   let ctx = null;
@@ -31,7 +57,6 @@ function createRingtone() {
       if (ctx.state === "suspended") ctx.resume();
 
       const now = ctx.currentTime;
-      // Repeat the chime three times so it feels like a phone ring.
       [0, 0.55, 1.1].forEach((offset) => {
         [880, 1320].forEach((freq, i) => {
           const o = ctx.createOscillator();
@@ -72,7 +97,6 @@ export default function AdminOrders() {
 
   if (!ringtoneRef.current) ringtoneRef.current = createRingtone();
 
-  // Ring continuously every 8s while there's any un-accepted "Pending" order.
   useEffect(() => {
     const pendingCount = orders.filter((o) => o.status === "Pending").length;
     if (continuousRingRef.current) {
@@ -95,7 +119,6 @@ export default function AdminOrders() {
       setError("");
       const data = await adminApi.orders({ status, search });
 
-      // Detect new Pending orders that we haven't seen before.
       if (initialisedRef.current) {
         const newPending = data.filter(
           (order) =>
@@ -104,7 +127,6 @@ export default function AdminOrders() {
         if (newPending.length > 0) {
           if (soundOn) ringtoneRef.current.play();
           setNewOrderFlash(newPending.length);
-          // Browser notification (when permission granted)
           if ("Notification" in window && Notification.permission === "granted") {
             try {
               new Notification("New order received!", {
@@ -133,7 +155,6 @@ export default function AdminOrders() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [status]);
 
-  // Poll for new orders every 15 seconds.
   useEffect(() => {
     const id = setInterval(() => loadOrders({ silent: true }), 15000);
     return () => clearInterval(id);
@@ -145,7 +166,6 @@ export default function AdminOrders() {
     setSoundOn(next);
     localStorage.setItem("caspian_admin_sound", next ? "on" : "off");
     if (next) {
-      // Test sound and warm up the audio context (must be triggered by a click).
       ringtoneRef.current.play();
       if ("Notification" in window && Notification.permission === "default") {
         Notification.requestPermission();
@@ -193,20 +213,13 @@ export default function AdminOrders() {
       typeof order.address === "string"
         ? order.address
         : order.address
-        ? `
-Address:
-${order.address.label || ""}
-${order.address.line1 || ""}
-${order.address.line2 || ""}
-${order.address.city || ""}
-${order.address.postcode || ""}
-${order.address.instructions || ""}
-`
+        ? `\nAddress:\n${order.address.label || ""}\n${order.address.line1 || ""}\n${order.address.line2 || ""}\n${order.address.city || ""}\n${order.address.postcode || ""}\n${order.address.instructions || ""}`
         : "Address: Not provided";
     const receipt = `
 Caspian Tandoori
 ------------------------
 Order ID: ${order._id}
+Date: ${formatOrderTime(order.createdAt)}
 Customer: ${order.customerName}
 Phone: ${order.phone}
 Type: ${order.orderType}
@@ -235,7 +248,7 @@ Notes: ${order.notes || "None"}
         <div>
           <h2 className="font-serif text-4xl font-black text-white">Orders</h2>
           <p className="mt-2 text-white/55">
-            View, search, filter, print and update customer orders. Sound alerts on new orders.
+            View, search, filter, print and update customer orders.
           </p>
         </div>
 
@@ -312,7 +325,7 @@ Notes: ${order.notes || "None"}
               }`}
             >
               <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-                <div>
+                <div className="flex-1">
                   <p className="text-sm font-black uppercase tracking-[0.25em] text-[#ff5b00]">
                     {order.orderType}
                   </p>
@@ -327,13 +340,39 @@ Notes: ${order.notes || "None"}
                     <p className="text-white/45">{order.user.email}</p>
                   )}
 
-                  <p className="mt-3 text-sm text-white/45">
+                  {/* ── ORDER DATE & TIME ── */}
+                  <div className="mt-3 flex flex-wrap items-center gap-2">
+                    <div className="flex items-center gap-2 rounded-xl border border-white/10 bg-black/40 px-3 py-2">
+                      <span className="text-base">🕐</span>
+                      <div>
+                        <p className="text-xs font-black uppercase tracking-wider text-white/40">
+                          Order placed
+                        </p>
+                        <p className="text-sm font-bold text-white">
+                          {formatOrderTime(order.createdAt)}
+                        </p>
+                      </div>
+                      <span className="ml-2 rounded-full bg-white/10 px-2 py-0.5 text-xs font-bold text-white/50">
+                        {timeAgo(order.createdAt)}
+                      </span>
+                    </div>
+                  </div>
+
+                  <p className="mt-3 text-xs text-white/35">
                     Order ID: {order._id}
                   </p>
 
                   {order.scheduledFor && (
-                    <p className="mt-1 rounded-md bg-amber-500/15 px-2 py-1 text-xs font-black text-amber-200">
-                      Scheduled for: {new Date(order.scheduledFor).toLocaleString("en-GB")}
+                    <p className="mt-2 inline-block rounded-md bg-amber-500/15 px-2 py-1 text-xs font-black text-amber-200">
+                      📅 Scheduled for: {new Date(order.scheduledFor).toLocaleString("en-GB", {
+                        weekday: "short",
+                        day: "2-digit",
+                        month: "short",
+                        year: "numeric",
+                        hour: "2-digit",
+                        minute: "2-digit",
+                        hour12: false,
+                      })}
                     </p>
                   )}
 
@@ -382,7 +421,9 @@ Notes: ${order.notes || "None"}
                     }`}
                     data-testid={`payment-status-${order._id}`}
                   >
-                    {order.paymentStatus === "Paid" ? "✓ PAID" : `Payment: ${order.paymentStatus || "Pending"}`}
+                    {order.paymentStatus === "Paid"
+                      ? "✓ PAID"
+                      : `Payment: ${order.paymentStatus || "Pending"}`}
                   </p>
                 </div>
               </div>
@@ -402,6 +443,24 @@ Notes: ${order.notes || "None"}
                     </div>
                   ))}
                 </div>
+                {order.subtotal > 0 && (
+                  <div className="mt-3 border-t border-white/10 pt-3 text-sm text-white/45">
+                    <div className="flex justify-between">
+                      <span>Subtotal</span>
+                      <span>{money(order.subtotal)}</span>
+                    </div>
+                    {order.deliveryFee > 0 && (
+                      <div className="flex justify-between">
+                        <span>Delivery ({order.deliveryArea})</span>
+                        <span>{money(order.deliveryFee)}</span>
+                      </div>
+                    )}
+                    <div className="flex justify-between font-black text-white">
+                      <span>Total</span>
+                      <span>{money(order.total)}</span>
+                    </div>
+                  </div>
+                )}
               </div>
 
               {order.address && (
@@ -496,7 +555,11 @@ Notes: ${order.notes || "None"}
                 ))}
                 {order.estimatedReadyAt && (
                   <span className="ml-2 text-white/55">
-                    Ready by {new Date(order.estimatedReadyAt).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })}
+                    Ready by{" "}
+                    {new Date(order.estimatedReadyAt).toLocaleTimeString("en-GB", {
+                      hour: "2-digit",
+                      minute: "2-digit",
+                    })}
                   </span>
                 )}
               </div>
