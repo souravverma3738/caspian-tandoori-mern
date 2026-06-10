@@ -18,8 +18,13 @@ router.post("/", auth, async (req, res) => {
     orderType,
     address,
     items,
+    subtotal: Number(total || 0),
     total,
-    notes
+    notes,
+    paymentStatus: "Pending",
+    paymentProvider: "cash",
+    paymentMethod: "cash",
+    status: "Pending",
   });
 
   res.status(201).json(order);

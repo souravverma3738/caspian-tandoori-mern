@@ -19,6 +19,7 @@ connectDB();
 const app = express();
 
 app.use(cors({ origin: process.env.CLIENT_URL, credentials: true }));
+app.use("/api/webhooks", stripeWebhookRoutes);
 app.use(express.json());
 
 async function getOrCreateSettings() {
@@ -146,7 +147,6 @@ app.use("/api/auth", authRoutes);
 app.use("/api/users", userRoutes);
 app.use("/api/orders", orderRoutes);
 app.use("/api/payments", paymentRoutes);
-app.use("/api/webhooks", stripeWebhookRoutes);
 
 const PORT = process.env.PORT || 8000;
 app.listen(PORT, () => console.log(`Server running on port ${PORT}`));

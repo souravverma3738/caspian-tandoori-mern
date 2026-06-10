@@ -1,9 +1,10 @@
 import express from "express";
 import Stripe from "stripe";
-import Order from "../models/Order.js";
+import PendingCheckout from "../models/PendingCheckout.js";
 import RestaurantSettings from "../models/RestaurantSettings.js";
 import { auth } from "../middleware/auth.js";
 import { getShopStatus, quoteDelivery, isScheduledTimeValid } from "../utils/shop.js";
+import { createOrderFromPaidStripeSession } from "../services/stripeOrderConfirmation.js";
 
 const router = express.Router();
 
@@ -89,7 +90,7 @@ router.post("/create-checkout-session", auth, async (req, res) => {
 
     const total = Math.round((subtotal + deliveryFee) * 100) / 100;
 
-    const order = await Order.create({
+    const pendingCheckout = await PendingCheckout.create({
       user: req.user._id,
       customerName,
       phone,
@@ -102,9 +103,6 @@ router.post("/create-checkout-session", auth, async (req, res) => {
       total,
       notes,
       scheduledFor: normalizedScheduledFor,
-      paymentStatus: "Pending",
-      status: "Pending Payment",
-      paymentProvider: "stripe",
     });
 
     const lineItems = items.map((item) => ({
@@ -134,16 +132,16 @@ router.post("/create-checkout-session", auth, async (req, res) => {
       payment_method_types: ["card"],
       line_items: lineItems,
       metadata: {
-        orderId: String(order._id),
+        checkoutId: String(pendingCheckout._id),
         userId: String(req.user._id),
       },
       return_url: `${process.env.CLIENT_URL}/?checkout=return&session_id={CHECKOUT_SESSION_ID}`,
     });
 
-    order.stripeSessionId = session.id;
-    await order.save();
+    pendingCheckout.stripeSessionId = session.id;
+    await pendingCheckout.save();
 
-    res.json({ clientSecret: session.client_secret, orderId: order._id });
+    res.json({ clientSecret: session.client_secret, checkoutId: pendingCheckout._id });
   } catch (err) {
     res.status(500).json({ message: err.message || "Could not create payment" });
   }
@@ -160,22 +158,21 @@ router.get("/verify-session/:sessionId", auth, async (req, res) => {
     const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
     const session = await stripe.checkout.sessions.retrieve(sessionId);
 
-    const order = await Order.findOne({ stripeSessionId: sessionId });
-    if (!order) return res.status(404).json({ message: "Order not found" });
-
-    if (session.payment_status === "paid" && order.paymentStatus !== "Paid") {
-      order.paymentStatus = "Paid";
-      if (order.status === "Pending Payment") order.status = "Pending";
-      if (session.payment_intent) order.stripePaymentIntentId = String(session.payment_intent);
-      await order.save();
+    let result = { order: null };
+    if (session.payment_status === "paid") {
+      result = await createOrderFromPaidStripeSession(session);
     } else if (session.status === "expired" || session.payment_status === "unpaid") {
-      // Leave the order as-is; do not mark as failed automatically.
+      await PendingCheckout.findOneAndUpdate(
+        { stripeSessionId: sessionId },
+        { status: session.status === "expired" ? "cancelled" : "failed" }
+      );
     }
 
     res.json({
-      paymentStatus: order.paymentStatus,
-      status: order.status,
-      orderId: order._id,
+      paymentStatus: session.payment_status === "paid" ? "Paid" : "Pending",
+      checkoutStatus: session.status,
+      status: result.order?.status || null,
+      orderId: result.order?._id || null,
     });
   } catch (err) {
     res.status(500).json({ message: err.message || "Could not verify payment" });

@@ -15,11 +15,18 @@ router.use(adminOnly);
 router.get("/dashboard", async (req, res) => {
   const startOfDay = new Date();
   startOfDay.setHours(0, 0, 0, 0);
-   const ordersToday = await Order.find({ createdAt: { $gte: startOfDay } });
-  const allOrders = await Order.find();
+  const visibleOrderQuery = {
+    status: { $ne: "Pending Payment" },
+    $or: [
+      { paymentProvider: { $ne: "stripe" } },
+      { paymentStatus: "Paid" },
+    ],
+  };
+   const ordersToday = await Order.find({ ...visibleOrderQuery, createdAt: { $gte: startOfDay } });
+  const allOrders = await Order.find(visibleOrderQuery);
   const totalCustomers = await User.countDocuments({ role: "customer" });
-  const pendingOrders = await Order.countDocuments({ status: "Pending" });
-  const completedOrders = await Order.countDocuments({ status: "Completed" });
+  const pendingOrders = await Order.countDocuments({ ...visibleOrderQuery, status: "Pending" });
+  const completedOrders = await Order.countDocuments({ ...visibleOrderQuery, status: "Completed" });
 
   const todayRevenue = ordersToday.reduce((sum, order) => sum + Number(order.total || 0), 0);
   const totalRevenue = allOrders.reduce((sum, order) => sum + Number(order.total || 0), 0);
@@ -50,15 +57,25 @@ router.get("/dashboard", async (req, res) => {
 router.get("/orders", async (req, res) => {
   const { status, search } = req.query;
 
-  const query = {};
+  const query = {
+    status: { $ne: "Pending Payment" },
+    $or: [
+      { paymentProvider: { $ne: "stripe" } },
+      { paymentStatus: "Paid" },
+    ],
+  };
   if (status && status !== "all") {
-    query.status = status;
+    query.status = status === "Pending Payment" ? "__hidden__" : status;
   }
 
   if (search) {
-    query.$or = [
+    query.$and = [
+      {
+        $or: [
       { customerName: { $regex: search, $options: "i" } },
       { phone: { $regex: search, $options: "i" } }
+        ],
+      },
     ];
   }
 

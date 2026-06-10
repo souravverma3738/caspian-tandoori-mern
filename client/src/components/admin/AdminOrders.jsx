@@ -3,7 +3,6 @@ import { adminApi, paymentApi } from "../../api";
 
 const statuses = [
   "all",
-  "Pending Payment",
   "Pending",
   "Accepted",
   "Preparing",
@@ -33,6 +32,24 @@ function formatOrderTime(dateString) {
   });
 }
 
+function paymentMethodLabel(order) {
+  const method = order.paymentMethod || order.paymentProvider || "cash";
+  if (method === "stripe") return "Stripe";
+  if (method === "paypal") return "PayPal";
+  if (method === "cash") return "Cash / pay in store";
+  return method;
+}
+
+function transactionId(order) {
+  return (
+    order.transactionId ||
+    order.stripePaymentIntentId ||
+    order.paypalOrderId ||
+    order.stripeSessionId ||
+    ""
+  );
+}
+
 function timeAgo(dateString) {
   if (!dateString) return "";
   const diffMs = Date.now() - new Date(dateString).getTime();
@@ -44,7 +61,6 @@ function timeAgo(dateString) {
   return `${Math.floor(diffHrs / 24)}d ago`;
 }
 
-// Tiny chime synthesised with WebAudio so we don't need any audio file.
 function createRingtone() {
   let ctx = null;
   function play() {
@@ -55,7 +71,6 @@ function createRingtone() {
         ctx = new AudioCtx();
       }
       if (ctx.state === "suspended") ctx.resume();
-
       const now = ctx.currentTime;
       [0, 0.55, 1.1].forEach((offset) => {
         [880, 1320].forEach((freq, i) => {
@@ -152,13 +167,11 @@ export default function AdminOrders() {
 
   useEffect(() => {
     loadOrders();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [status]);
 
   useEffect(() => {
     const id = setInterval(() => loadOrders({ silent: true }), 15000);
     return () => clearInterval(id);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [status, search, soundOn]);
 
   function toggleSound() {
@@ -209,37 +222,328 @@ export default function AdminOrders() {
   }
 
   function printReceipt(order) {
-    const addressText =
-      typeof order.address === "string"
-        ? order.address
-        : order.address
-        ? `\nAddress:\n${order.address.label || ""}\n${order.address.line1 || ""}\n${order.address.line2 || ""}\n${order.address.city || ""}\n${order.address.postcode || ""}\n${order.address.instructions || ""}`
-        : "Address: Not provided";
-    const receipt = `
-Caspian Tandoori
-------------------------
-Order ID: ${order._id}
-Date: ${formatOrderTime(order.createdAt)}
-Customer: ${order.customerName}
-Phone: ${order.phone}
-Type: ${order.orderType}
-Status: ${order.status}
-${addressText}
-Items:
-${order.items
-  .map((item) => `${item.qty} x ${item.name} - ${money(item.price * item.qty)}`)
-  .join("\n")}
+    const addressLines = (() => {
+      if (!order.address) return [];
+      if (typeof order.address === "string") return [order.address];
+      return [
+        order.address.label,
+        order.address.line1,
+        order.address.line2,
+        order.address.city,
+        order.address.postcode,
+        order.address.instructions,
+      ].filter(Boolean);
+    })();
 
-Subtotal: ${money(order.subtotal || 0)}
-Delivery: ${money(order.deliveryFee || 0)}
-Total: ${money(order.total)}
-Notes: ${order.notes || "None"}
-`;
+    const isDelivery = order.orderType === "Delivery";
+    const isPaid = order.paymentStatus === "Paid";
+    const shortId = order._id.slice(-6).toUpperCase();
+    const dateStr = formatOrderTime(order.createdAt);
+    const scheduledStr = order.scheduledFor
+      ? new Date(order.scheduledFor).toLocaleString("en-GB", {
+          weekday: "short", day: "2-digit", month: "short",
+          year: "numeric", hour: "2-digit", minute: "2-digit", hour12: false,
+        })
+      : null;
 
-    const printWindow = window.open("", "_blank");
-    printWindow.document.write(`<pre>${receipt}</pre>`);
+    const itemsHtml = order.items
+      .map(
+        (item) => `
+        <tr>
+          <td style="padding:7px 0; vertical-align:top;">
+            <span style="display:inline-block; background:#1a1a1a; color:#fff; font-size:11px; font-weight:700; border-radius:4px; padding:1px 7px; margin-right:6px;">${item.qty}&times;</span>
+            <span style="font-size:13.5px; font-weight:600; color:#111;">${item.name}</span>
+            ${item.category ? `<br><span style="font-size:11px; color:#888; margin-left:26px;">${item.category}</span>` : ""}
+          </td>
+          <td style="padding:7px 0; text-align:right; vertical-align:top; font-size:13.5px; font-weight:700; color:#111; white-space:nowrap;">${money(item.price * item.qty)}</td>
+        </tr>`
+      )
+      .join("");
+
+    const barsHtml = [18,12,22,10,20,14,24,8,18,16,22,10,20,26,12,18,14,22,10,24,16,20,12,18,22,8,14,20,18,24,10,16,22,12,20,18,14,22]
+      .map((h, i) => {
+        const w = i % 3 === 0 ? 3 : i % 5 === 0 ? 2 : 1;
+        return `<div style="width:${w}px;height:${h}px;background:#222;border-radius:1px;flex-shrink:0;"></div>`;
+      })
+      .join("");
+
+    const html = `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Order Receipt #${shortId}</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'DM Sans', system-ui, sans-serif;
+      background: #f0ede8;
+      display: flex;
+      justify-content: center;
+      align-items: flex-start;
+      min-height: 100vh;
+      padding: 32px 16px 64px;
+    }
+    .receipt {
+      width: 360px;
+      background: #fff;
+      border-radius: 20px;
+      overflow: hidden;
+      box-shadow: 0 12px 48px rgba(0,0,0,0.14), 0 2px 6px rgba(0,0,0,0.07);
+    }
+    .header {
+      background: #111;
+      color: #fff;
+      padding: 24px 24px 20px;
+    }
+    .header-brand {
+      font-size: 10.5px;
+      font-weight: 700;
+      letter-spacing: 0.2em;
+      text-transform: uppercase;
+      color: #ff5b00;
+      margin-bottom: 8px;
+    }
+    .header-ordernum {
+      font-size: 26px;
+      font-weight: 800;
+      letter-spacing: -0.5px;
+    }
+    .header-date {
+      font-size: 11px;
+      color: #888;
+      margin-top: 3px;
+      font-family: 'DM Mono', monospace;
+      letter-spacing: 0.02em;
+    }
+    .payment-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      margin-top: 14px;
+      padding: 5px 14px;
+      border-radius: 999px;
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.07em;
+      text-transform: uppercase;
+    }
+    .badge-paid   { background: rgba(16,185,129,0.18); color: #10b981; border: 1px solid rgba(16,185,129,0.35); }
+    .badge-unpaid { background: rgba(255,91,0,0.15);   color: #ff5b00; border: 1px solid rgba(255,91,0,0.3); }
+    .type-strip {
+      padding: 11px 24px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 13px;
+      font-weight: 700;
+      letter-spacing: 0.03em;
+      color: #fff;
+    }
+    .type-delivery   { background: #ff5b00; }
+    .type-collection { background: #1a1a1a; }
+    .body { padding: 4px 0; }
+    .section {
+      padding: 14px 24px;
+      border-bottom: 1px dashed #eaeaea;
+    }
+    .section:last-child { border-bottom: none; }
+    .sec-label {
+      font-size: 9.5px;
+      font-weight: 700;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      color: #bbb;
+      margin-bottom: 7px;
+    }
+    .cust-name {
+      font-size: 18px;
+      font-weight: 800;
+      color: #111;
+      letter-spacing: -0.4px;
+    }
+    .cust-detail {
+      font-size: 12.5px;
+      color: #666;
+      margin-top: 3px;
+      font-family: 'DM Mono', monospace;
+    }
+    .addr-line {
+      font-size: 13px;
+      color: #333;
+      line-height: 1.7;
+    }
+    .items-table { width: 100%; border-collapse: collapse; }
+    .item-sep {
+      border: none;
+      border-top: 1px solid #f2f2f2;
+      margin: 0;
+    }
+    .total-divider {
+      border: none;
+      border-top: 1.5px solid #111;
+      margin: 10px 0 0;
+    }
+    .sub-row td { font-size: 13px; color: #666; padding: 3px 0; }
+    .sub-row td:last-child { text-align: right; }
+    .total-row td { font-size: 17px; font-weight: 800; color: #111; padding-top: 10px; }
+    .total-row td:last-child { text-align: right; color: #ff5b00; }
+    .notes-box {
+      background: #fafaf8;
+      border: 1px solid #ebebeb;
+      border-radius: 9px;
+      padding: 10px 13px;
+      font-size: 13px;
+      color: #444;
+      line-height: 1.6;
+    }
+    .sched-box {
+      background: #fffcf0;
+      border: 1.5px solid #ffd60a;
+      border-radius: 9px;
+      padding: 9px 13px;
+      font-size: 13px;
+      font-weight: 600;
+      color: #7a5c00;
+    }
+    .footer {
+      background: #f7f6f3;
+      border-top: 1px dashed #e0e0e0;
+      padding: 18px 24px 6px;
+      text-align: center;
+    }
+    .barcode {
+      display: flex;
+      gap: 2px;
+      justify-content: center;
+      align-items: flex-end;
+      height: 32px;
+      margin-bottom: 10px;
+    }
+    .footer-id {
+      font-family: 'DM Mono', monospace;
+      font-size: 10.5px;
+      color: #bbb;
+      letter-spacing: 0.09em;
+      margin-bottom: 4px;
+    }
+    .footer-thanks {
+      font-size: 13px;
+      font-weight: 700;
+      color: #444;
+      margin-bottom: 18px;
+    }
+    .print-btn {
+      display: block;
+      width: calc(100% - 48px);
+      margin: 0 24px 20px;
+      padding: 14px;
+      background: #111;
+      color: #fff;
+      border: none;
+      border-radius: 12px;
+      font-family: 'DM Sans', sans-serif;
+      font-size: 14px;
+      font-weight: 700;
+      cursor: pointer;
+      letter-spacing: 0.04em;
+      transition: background 0.2s;
+    }
+    .print-btn:hover { background: #ff5b00; }
+    @media print {
+      body { background: #fff; padding: 0; }
+      .receipt { box-shadow: none; border-radius: 0; width: 100%; }
+      .print-btn { display: none !important; }
+      .footer { background: #fff; }
+    }
+  </style>
+</head>
+<body>
+  <div class="receipt">
+
+    <div class="header">
+      <div class="header-brand">&#127829; Caspian Tandoori</div>
+      <div class="header-ordernum">Order #${shortId}</div>
+      <div class="header-date">${dateStr}</div>
+      <div class="payment-badge ${isPaid ? "badge-paid" : "badge-unpaid"}">
+        ${isPaid ? "&#10003;&nbsp; Payment Confirmed" : "&#9203;&nbsp; " + (order.paymentStatus || "Payment Pending")}
+      </div>
+    </div>
+
+    <div class="type-strip ${isDelivery ? "type-delivery" : "type-collection"}">
+      ${isDelivery ? "&#128693;&nbsp; Delivery Order" : "&#127978;&nbsp; Collection &mdash; Pick up in store"}
+    </div>
+
+    <div class="body">
+
+      <div class="section">
+        <div class="sec-label">Customer</div>
+        <div class="cust-name">${order.customerName}</div>
+        <div class="cust-detail">&#128222; ${order.phone}</div>
+        ${order.user?.email ? `<div class="cust-detail">&#9993; ${order.user.email}</div>` : ""}
+      </div>
+
+      ${isDelivery && addressLines.length ? `
+      <div class="section">
+        <div class="sec-label">Deliver to</div>
+        <div class="addr-line">${addressLines.join("<br>")}</div>
+      </div>` : ""}
+
+      ${scheduledStr ? `
+      <div class="section">
+        <div class="sec-label">Scheduled for</div>
+        <div class="sched-box">&#128197; ${scheduledStr}</div>
+      </div>` : ""}
+
+      <div class="section">
+        <div class="sec-label">Items ordered</div>
+        <table class="items-table">${itemsHtml}</table>
+      </div>
+
+      <div class="section">
+        <table style="width:100%;border-collapse:collapse;">
+          <tr class="sub-row"><td>Subtotal</td><td>${money(order.subtotal || 0)}</td></tr>
+          ${Number(order.deliveryFee) > 0 ? `<tr class="sub-row"><td>Delivery${order.deliveryArea ? ` (${order.deliveryArea})` : ""}</td><td>${money(order.deliveryFee)}</td></tr>` : ""}
+          <tr><td colspan="2"><hr class="total-divider"></td></tr>
+          <tr class="total-row"><td>Total paid</td><td>${money(order.total)}</td></tr>
+        </table>
+      </div>
+
+      ${order.notes ? `
+      <div class="section">
+        <div class="sec-label">Order notes</div>
+        <div class="notes-box">&#128221; ${order.notes}</div>
+      </div>` : ""}
+
+    </div>
+
+    <div class="footer">
+      <div class="barcode">${barsHtml}</div>
+      <div class="footer-id">ORDER-${order._id.slice(-10).toUpperCase()}</div>
+      <div class="footer-thanks">Thank you for your order! &#128591;</div>
+    </div>
+
+    <button class="print-btn" onclick="window.print()">&#128438; Print Receipt</button>
+
+  </div>
+  <script>
+    if (document.fonts && document.fonts.ready) {
+      document.fonts.ready.then(() => setTimeout(() => window.print(), 500));
+    } else {
+      setTimeout(() => window.print(), 900);
+    }
+  </script>
+</body>
+</html>`;
+
+    const printWindow = window.open("", "_blank", "width=460,height=820");
+    if (!printWindow) {
+      alert("Please allow pop-ups to print the receipt.");
+      return;
+    }
+    printWindow.document.write(html);
     printWindow.document.close();
-    printWindow.print();
   }
 
   return (
@@ -340,7 +644,6 @@ Notes: ${order.notes || "None"}
                     <p className="text-white/45">{order.user.email}</p>
                   )}
 
-                  {/* ── ORDER DATE & TIME ── */}
                   <div className="mt-3 flex flex-wrap items-center gap-2">
                     <div className="flex items-center gap-2 rounded-xl border border-white/10 bg-black/40 px-3 py-2">
                       <span className="text-base">🕐</span>
@@ -365,22 +668,15 @@ Notes: ${order.notes || "None"}
                   {order.scheduledFor && (
                     <p className="mt-2 inline-block rounded-md bg-amber-500/15 px-2 py-1 text-xs font-black text-amber-200">
                       📅 Scheduled for: {new Date(order.scheduledFor).toLocaleString("en-GB", {
-                        weekday: "short",
-                        day: "2-digit",
-                        month: "short",
-                        year: "numeric",
-                        hour: "2-digit",
-                        minute: "2-digit",
-                        hour12: false,
+                        weekday: "short", day: "2-digit", month: "short",
+                        year: "numeric", hour: "2-digit", minute: "2-digit", hour12: false,
                       })}
                     </p>
                   )}
 
                   <p
                     className={`mt-2 inline-block rounded-full px-3 py-1 text-xs font-black uppercase tracking-wider ${
-                      order.status === "Pending Payment"
-                        ? "bg-white/10 text-white/50"
-                        : order.status === "Pending"
+                      order.status === "Pending"
                         ? "bg-amber-500/20 text-amber-200"
                         : order.status === "Accepted" || order.status === "Preparing"
                         ? "bg-sky-500/20 text-sky-200"
@@ -396,8 +692,6 @@ Notes: ${order.notes || "None"}
                   >
                     {order.status === "Pending"
                       ? "🆕 New — needs accept"
-                      : order.status === "Pending Payment"
-                      ? "Awaiting payment / abandoned"
                       : order.status}
                   </p>
                 </div>
@@ -411,6 +705,22 @@ Notes: ${order.notes || "None"}
                       incl. {money(order.deliveryFee)} delivery ({order.deliveryArea})
                     </p>
                   )}
+                  <div className="mt-3 rounded-xl border border-white/10 bg-black/40 p-3 text-sm text-white/60">
+                    <p>
+                      <span className="font-black text-white/45">Payment Method:</span>{" "}
+                      {paymentMethodLabel(order)}
+                    </p>
+                    <p>
+                      <span className="font-black text-white/45">Payment Status:</span>{" "}
+                      {order.paymentStatus || "Pending"}
+                    </p>
+                    {transactionId(order) && (
+                      <p className="break-all">
+                        <span className="font-black text-white/45">Transaction ID:</span>{" "}
+                        {transactionId(order)}
+                      </p>
+                    )}
+                  </div>
                   <p
                     className={`mt-2 inline-block rounded-full px-3 py-1 text-xs font-black ${
                       order.paymentStatus === "Paid"
@@ -520,12 +830,12 @@ Notes: ${order.notes || "None"}
 
                   <button
                     onClick={() => printReceipt(order)}
-                    className="rounded-xl border border-white/10 px-4 py-3 font-black text-white"
+                    className="rounded-xl border border-white/10 px-4 py-3 font-black text-white hover:border-[#ff5b00] hover:text-[#ff5b00] transition"
                   >
-                    Print
+                    🖨️ Print
                   </button>
 
-                  {order.paymentStatus !== "Paid" && order.stripeSessionId && (
+                  {order.paymentProvider === "stripe" && order.paymentStatus !== "Paid" && order.stripeSessionId && (
                     <button
                       onClick={() => recheckPayment(order)}
                       data-testid={`recheck-payment-${order._id}`}

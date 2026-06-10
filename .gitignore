@@ -1,6 +1,11 @@
 .env
 .env.*
 *.env
+node_modules/
+client/node_modules/
+dist/
+client/dist/
+client/.env
 credentials.json
 *.pem
 *.key

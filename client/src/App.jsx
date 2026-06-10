@@ -16,7 +16,6 @@ import { firebaseAuth, googleProvider } from "./firebase";
 import { loadStripe } from "@stripe/stripe-js";
 import { EmbeddedCheckout, EmbeddedCheckoutProvider } from "@stripe/react-stripe-js";
 import AdminDashboard from "./components/admin/AdminDashboard";
-import axios from "axios";
 const stripePromise = loadStripe(import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY);
 const categories = [
   { id: "pizza", name: "Pizzas", items: [
@@ -413,37 +412,11 @@ const [page, setPage] = useState("home");
 };
  const changeQty = (id, amount) => { setCart((prev) => changeItemQuantity(prev, id, amount)); setPlaced(false); };
   const [checkoutClientSecret, setCheckoutClientSecret] = useState(null);
+  const [checkoutMessage, setCheckoutMessage] = useState("");
   const [settings, setSettings] = useState(null);
 const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 const [theme, setTheme] = useState("dark");
 
-useEffect(() => {
-  const verifyPayment = async () => {
-    try {
-      const params = new URLSearchParams(window.location.search);
-      const sessionId = params.get("session_id");
-
-      if (!sessionId) return;
-
-      const token = localStorage.getItem("token");
-
-      await axios.get(
-        `${import.meta.env.VITE_API_URL}/api/payments/verify-session/${sessionId}`,
-        {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        }
-      );
-
-      console.log("Payment verified");
-    } catch (err) {
-      console.error(err);
-    }
-  };
-
-  verifyPayment();
-}, []);
 useEffect(() => {
   async function restoreLogin() {
     const storedUser = getStoredUser();
@@ -481,13 +454,23 @@ useEffect(() => {
 
   paymentApi
     .verifySession(sessionId)
+    .then((result) => {
+      if (result.paymentStatus === "Paid" && result.orderId) {
+        setPage("profile");
+        setCart([]);
+        setPlaced(true);
+        setCheckoutMessage("Payment successful. Your order has been sent to the restaurant.");
+      } else {
+        setPage("menu");
+        setCartOpen(true);
+        setPlaced(false);
+        setCheckoutMessage("Payment was not completed. Your basket is still here so you can try again.");
+      }
+    })
     .catch((err) => console.error("Could not verify Stripe session:", err))
     .finally(() => {
       // Clean the URL so refreshes don't re-trigger.
       window.history.replaceState({}, "", window.location.pathname);
-      setPage("profile");
-      setCart([]);
-      setPlaced(true);
     });
 }, []);
 
@@ -575,10 +558,12 @@ if (authLoading) {
     setCustomer={setCustomer}
     placed={placed}
     setPlaced={setPlaced}
-    setCheckoutClientSecret={setCheckoutClientSecret}
-    shopStatus={shopStatus}
-    settings={settings}
-  />
+  setCheckoutClientSecret={setCheckoutClientSecret}
+  checkoutMessage={checkoutMessage}
+  setCheckoutMessage={setCheckoutMessage}
+  shopStatus={shopStatus}
+  settings={settings}
+/>
 )}    <style>{`
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=Playfair+Display:wght@600;700;800;900&display=swap');
 
@@ -1864,6 +1849,8 @@ function CartDrawer({
   placed,
   setPlaced,
   setCheckoutClientSecret,
+  checkoutMessage,
+  setCheckoutMessage,
   shopStatus,
   settings,
 }) {
@@ -1946,6 +1933,7 @@ function CartDrawer({
   async function submitOrder(e) {
     e.preventDefault();
     setError("");
+    setCheckoutMessage("");
 
     if (!user) {
       setCartOpen(false);
@@ -2091,10 +2079,15 @@ function CartDrawer({
 
             {placed ? (
               <div className="rounded-3xl border border-green-500/20 bg-green-500/10 p-5 text-green-200">
-                Order placed successfully and saved to database.
+                {checkoutMessage || "Order placed successfully."}
               </div>
             ) : (
               <form onSubmit={submitOrder} className="grid gap-3" data-testid="cart-form">
+                {checkoutMessage && (
+                  <p className="rounded-xl border border-red-500/20 bg-red-500/10 p-3 text-sm font-bold text-red-200">
+                    {checkoutMessage}
+                  </p>
+                )}
                 <div className="grid grid-cols-2 gap-3">
                   {["Collection", "Delivery"].map((type) => (
                     <button

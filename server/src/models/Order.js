@@ -25,7 +25,7 @@ const orderSchema = new mongoose.Schema(
     estimatedMinutes: { type: Number, default: null },
     estimatedReadyAt: { type: Date, default: null },
 
-      paymentStatus: {
+    paymentStatus: {
       type: String,
       enum: ["Pending", "Paid", "Failed", "Refunded"],
       default: "Pending",
@@ -33,9 +33,12 @@ const orderSchema = new mongoose.Schema(
 
     paymentProvider: {
       type: String,
-      default: "stripe",
+      default: "cash",
     },
 
+    paymentMethod: { type: String, default: "cash" },
+    transactionId: { type: String, default: "" },
+    paypalOrderId: { type: String, default: "" },
     stripeSessionId: String,
     stripePaymentIntentId: String,
 
@@ -52,7 +55,7 @@ const orderSchema = new mongoose.Schema(
   "Completed",
   "Cancelled",
 ],
-      default: "Pending Payment",
+      default: "Pending",
     },
   },
   { timestamps: true }

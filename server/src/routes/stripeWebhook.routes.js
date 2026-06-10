@@ -1,6 +1,6 @@
 import express from "express";
 import Stripe from "stripe";
-import Order from "../models/Order.js";
+import { createOrderFromPaidStripeSession } from "../services/stripeOrderConfirmation.js";
 
 const router = express.Router();
 
@@ -26,13 +26,7 @@ router.post(
 
     if (event.type === "checkout.session.completed") {
       const session = event.data.object;
-      const orderId = session.metadata.orderId;
-
-      await Order.findByIdAndUpdate(orderId, {
-        paymentStatus: "Paid",
-        status: "Pending",
-        stripePaymentIntentId: session.payment_intent,
-      });
+      await createOrderFromPaidStripeSession(session);
     }
 
     res.json({ received: true });
