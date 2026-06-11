@@ -6,6 +6,7 @@ import AdminClockInOut from "./AdminClockInOut";
 import AdminTemperatures from "./AdminTemperatures";
 import AdminReports from "./AdminReports";
 import AdminSettings from "./AdminSettings";
+import AdminOrderNotifier from "./AdminOrderNotifier";
 
 function AdminDashboard({ user, go }) {
   const [activeTab, setActiveTab] = useState("dashboard");
@@ -54,6 +55,8 @@ function AdminDashboard({ user, go }) {
 
   return (
     <section className="mx-auto max-w-7xl px-5 pb-24 pt-40 lg:px-8">
+      <AdminOrderNotifier onViewDetails={() => setActiveTab("orders")} />
+
       <div className="mb-10 flex flex-col gap-5 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <p className="mb-3 text-sm font-black uppercase tracking-[0.35em] text-[#ff5b00]">

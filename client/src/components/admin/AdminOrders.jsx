@@ -113,20 +113,14 @@ export default function AdminOrders() {
   if (!ringtoneRef.current) ringtoneRef.current = createRingtone();
 
   useEffect(() => {
-    const pendingCount = orders.filter((o) => o.status === "Pending").length;
     if (continuousRingRef.current) {
       clearInterval(continuousRingRef.current);
       continuousRingRef.current = null;
     }
-    if (pendingCount > 0 && soundOn) {
-      continuousRingRef.current = setInterval(() => {
-        ringtoneRef.current.play();
-      }, 8000);
-    }
     return () => {
       if (continuousRingRef.current) clearInterval(continuousRingRef.current);
     };
-  }, [orders, soundOn]);
+  }, [orders]);
 
   async function loadOrders({ silent = false } = {}) {
     try {
@@ -140,7 +134,6 @@ export default function AdminOrders() {
             order.status === "Pending" && !knownOrderIdsRef.current.has(order._id)
         );
         if (newPending.length > 0) {
-          if (soundOn) ringtoneRef.current.play();
           setNewOrderFlash(newPending.length);
           if ("Notification" in window && Notification.permission === "granted") {
             try {
@@ -170,7 +163,7 @@ export default function AdminOrders() {
   }, [status]);
 
   useEffect(() => {
-    const id = setInterval(() => loadOrders({ silent: true }), 15000);
+    const id = setInterval(() => loadOrders({ silent: true }), 6000);
     return () => clearInterval(id);
   }, [status, search, soundOn]);
 
