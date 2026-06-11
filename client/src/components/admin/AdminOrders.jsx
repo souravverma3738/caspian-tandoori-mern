@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { adminApi, paymentApi } from "../../api";
+import { printOrderReceipt } from "./orderReceiptPrinter";
 
 const statuses = [
   "all",
@@ -267,6 +268,9 @@ export default function AdminOrders() {
   }
 
   function printReceipt(order) {
+    printOrderReceipt(order);
+    return;
+
     const addressLines = (() => {
       if (!order.address) return [];
       if (typeof order.address === "string") return [order.address];

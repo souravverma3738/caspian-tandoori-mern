@@ -720,7 +720,7 @@ function Header({ page, go, count, user, settings, shopStatus, activeOffer, setA
       {shopStatus && (
         <div
           data-testid="shop-status-bar"
-          className={`px-5 py-1.5 text-center text-xs font-bold uppercase tracking-[0.18em] ${
+          className={`px-3 py-1 text-center text-[10px] font-bold uppercase tracking-[0.12em] sm:px-5 sm:py-1.5 sm:text-xs sm:tracking-[0.18em] ${
             shopStatus.isOpen
               ? "bg-emerald-600/20 text-emerald-200"
               : "bg-red-600/20 text-red-200"
@@ -744,9 +744,9 @@ function Header({ page, go, count, user, settings, shopStatus, activeOffer, setA
         </div>
       )}
       {activeOffer && (
-        <div className="border-y border-[#1a0f0a]/20 bg-[#F26B1F] px-4 py-2 text-center text-[#1a0f0a] shadow-[inset_0_1px_0_rgba(255,255,255,0.18)]">
-          <span className="inline-flex flex-wrap items-center justify-center gap-x-2 gap-y-1 text-sm font-semibold">
-            <span className="rounded-full bg-white px-2.5 py-0.5 text-[11px] font-black uppercase tracking-[0.16em] text-[#1a0f0a]">
+        <div className="border-y border-[#1a0f0a]/20 bg-[#F26B1F] px-3 py-1.5 text-center text-[#1a0f0a] shadow-[inset_0_1px_0_rgba(255,255,255,0.18)] sm:px-4 sm:py-2">
+          <span className="inline-flex flex-wrap items-center justify-center gap-x-1.5 gap-y-1 text-xs font-semibold sm:gap-x-2 sm:text-sm">
+            <span className="rounded-full bg-white px-2 py-0.5 text-[9px] font-black uppercase tracking-[0.14em] text-[#1a0f0a] sm:px-2.5 sm:text-[11px] sm:tracking-[0.16em]">
               Offer
             </span>
             <span className="font-black">
@@ -759,18 +759,18 @@ function Header({ page, go, count, user, settings, shopStatus, activeOffer, setA
           </span>
         </div>
       )}
-      <div className="mx-auto flex max-w-7xl items-center justify-between px-5 py-5 lg:px-8">
+      <div className="mx-auto flex max-w-7xl items-center justify-between gap-3 px-4 py-3 sm:px-5 sm:py-5 lg:px-8">
         <button
           onClick={() => go("home")}
-          className="flex items-center gap-3 text-left"
+          className="flex min-w-0 items-center gap-2 text-left sm:gap-3"
         >
           <img
             src="/caspian_logo.jpg"
             alt="Caspian Tandoori"
-            className="h-11 w-11 rounded-full border border-[#ff5b00]/40 object-cover"
+            className="h-9 w-9 flex-none rounded-full border border-[#ff5b00]/40 object-cover sm:h-11 sm:w-11"
           />
 
-          <span className="font-serif text-3xl font-black tracking-tight">
+          <span className="max-w-[11rem] whitespace-nowrap font-serif text-2xl font-black leading-none tracking-tight sm:max-w-none sm:text-3xl">
             {settings?.restaurantName || "Caspian Tandoori"}
           </span>
         </button>
@@ -822,7 +822,7 @@ function Header({ page, go, count, user, settings, shopStatus, activeOffer, setA
 
           <button
             onClick={() => setCartOpen(true)}
-            className="relative grid h-14 w-14 place-items-center rounded-2xl border border-white/30 bg-black/25 text-white transition hover:border-[#ff5b00] hover:text-[#ff5b00]"
+            className="relative grid h-12 w-12 flex-none place-items-center rounded-2xl border border-white/30 bg-black/25 text-white transition hover:border-[#ff5b00] hover:text-[#ff5b00] sm:h-14 sm:w-14"
             aria-label="Open basket"
           >
             <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -845,7 +845,7 @@ function Header({ page, go, count, user, settings, shopStatus, activeOffer, setA
             Order Now
           </Button>
 
-          <button onClick={() => setMobileOpen(true)} className="md:hidden">
+          <button onClick={() => setMobileOpen(true)} className="grid h-10 w-8 flex-none place-items-center md:hidden">
             <Icon name="menu" />
           </button>
         </div>
@@ -1111,7 +1111,7 @@ function MobileNav({ go, user, setMobileOpen }) {
     </div>
   );
 }function HomePage({ go, shopStatus }) {
-  return <><section className="relative min-h-screen overflow-hidden pt-24"><div className="absolute inset-0 bg-[radial-gradient(circle_at_65%_30%,rgba(255,91,0,.22),transparent_33%),linear-gradient(90deg,#050505_0%,rgba(0,0,0,.86)_31%,rgba(0,0,0,.45)_100%)]" /><div className="absolute inset-0 opacity-80"><div className="h-full w-full bg-[url('https://images.unsplash.com/photo-1504674900247-0877df9cc836?auto=format&fit=crop&w=1800&q=80')] bg-cover bg-center mix-blend-screen" /><div className="absolute inset-0 bg-black/55" /></div><div className="relative mx-auto grid min-h-[calc(100vh-6rem)] max-w-7xl items-center px-5 lg:px-8"><div className="max-w-2xl animate-[fadeUp_.7s_ease-out_both]"><p className="mb-6 text-sm font-black uppercase tracking-[0.42em] text-[#ff5b00]">Indian & Pizza Takeaway</p><h1 className="
+  return <><section className="relative min-h-screen overflow-hidden pt-44 sm:pt-40 lg:pt-36"><div className="absolute inset-0 bg-[radial-gradient(circle_at_65%_30%,rgba(255,91,0,.22),transparent_33%),linear-gradient(90deg,#050505_0%,rgba(0,0,0,.86)_31%,rgba(0,0,0,.45)_100%)]" /><div className="absolute inset-0 opacity-80"><div className="h-full w-full bg-[url('https://images.unsplash.com/photo-1504674900247-0877df9cc836?auto=format&fit=crop&w=1800&q=80')] bg-cover bg-center mix-blend-screen" /><div className="absolute inset-0 bg-black/55" /></div><div className="relative mx-auto grid min-h-[calc(100vh-11rem)] max-w-7xl items-center px-5 sm:min-h-[calc(100vh-10rem)] lg:min-h-[calc(100vh-9rem)] lg:px-8"><div className="max-w-2xl animate-[fadeUp_.7s_ease-out_both]"><p className="mb-4 text-xs font-black uppercase tracking-[0.28em] text-[#ff5b00] sm:mb-6 sm:text-sm sm:tracking-[0.42em]">Indian & Pizza Takeaway</p><h1 className="
   font-serif
   font-bold
   leading-tight
