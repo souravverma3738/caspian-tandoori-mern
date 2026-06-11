@@ -4,6 +4,7 @@ import { adminApi } from "../../api";
 const ACK_KEY = "caspian_acknowledged_order_ids";
 const SOUND_KEY = "caspian_admin_sound_enabled";
 const ALERT_AUDIO = "/order-alert.wav";
+const POLL_MS = 5000;
 
 function money(value) {
   return `£${Number(value || 0).toFixed(2)}`;
@@ -19,6 +20,10 @@ function paymentMethodLabel(order) {
   if (method === "paypal") return "PayPal";
   if (method === "cash") return "Cash / pay in store";
   return method;
+}
+
+function isPaidPendingOrder(order) {
+  return order?.status === "Pending" && order?.paymentStatus === "Paid";
 }
 
 function addressLines(order) {
@@ -88,7 +93,7 @@ export default function AdminOrderNotifier({ onViewDetails }) {
   async function fetchNewOrders() {
     try {
       const data = await adminApi.orders({ status: "Pending" });
-      const pending = data.filter((order) => order.status === "Pending");
+      const pending = data.filter(isPaidPendingOrder);
 
       const fresh = pending
         .filter((order) => !initialisedRef.current || !knownIdsRef.current.has(order._id))
@@ -135,7 +140,7 @@ export default function AdminOrderNotifier({ onViewDetails }) {
 
   useEffect(() => {
     fetchNewOrders();
-    const id = setInterval(fetchNewOrders, 6000);
+    const id = setInterval(fetchNewOrders, POLL_MS);
     const onFocus = () => fetchNewOrders();
     window.addEventListener("focus", onFocus);
     document.addEventListener("visibilitychange", onFocus);

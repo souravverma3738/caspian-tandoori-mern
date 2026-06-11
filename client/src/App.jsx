@@ -543,6 +543,7 @@ if (authLoading) {
   summary={checkoutSummary}
   orderType={orderType}
   customer={customer}
+  user={user}
 />
 )}
       </main>
@@ -583,7 +584,7 @@ h1,h2,h3,h4,h5,h6,.font-serif { font-family: 'Playfair Display', serif; }
     </div>
   );
 }
-function CheckoutPage({ clientSecret, go, cart = [], total = 0, summary = null, orderType, customer }) {
+function CheckoutPage({ clientSecret, go, cart = [], total = 0, summary = null, orderType, customer, user }) {
   const subtotal = Number(summary?.subtotal ?? total);
   const deliveryFee = Number(summary?.deliveryFee || 0);
   const discountAmount = Number(summary?.discountAmount || 0);
@@ -673,8 +674,8 @@ function CheckoutPage({ clientSecret, go, cart = [], total = 0, summary = null, 
 
             <div className="mt-5 rounded-2xl bg-black/30 p-4 text-white/60">
               <p><b className="text-white">Type:</b> {orderType}</p>
-              <p><b className="text-white">Name:</b> {customer?.name}</p>
-              <p><b className="text-white">Phone:</b> {customer?.phone}</p>
+              <p><b className="text-white">Name:</b> {customer?.name || user?.name}</p>
+              <p><b className="text-white">Phone:</b> {customer?.phone || user?.phone}</p>
 
               {orderType === "Delivery" && (
                 <p className="mt-2">

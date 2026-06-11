@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import AdminOverview from "./AdminOverview";
 import AdminOrders from "./AdminOrders";
 import AdminCustomers from "./AdminCustomers";
@@ -13,6 +13,10 @@ function AdminDashboard({ user, go }) {
   const [activeTab, setActiveTab] = useState("dashboard");
   const [installPrompt, setInstallPrompt] = useState(null);
   const [installed, setInstalled] = useState(false);
+  const [wakeLockStatus, setWakeLockStatus] = useState("");
+  const [wakeLockActive, setWakeLockActive] = useState(false);
+  const wakeLockRef = useRef(null);
+  const wakeLockRequestedRef = useRef(false);
 
   useEffect(() => {
     const handler = (e) => {
@@ -38,6 +42,52 @@ function AdminDashboard({ user, go }) {
       setInstallPrompt(null);
     }
   }
+
+  async function requestWakeLock() {
+    if (!("wakeLock" in navigator)) {
+      setWakeLockActive(false);
+      setWakeLockStatus("Please disable screen sleep in your device settings.");
+      return;
+    }
+
+    try {
+      wakeLockRef.current = await navigator.wakeLock.request("screen");
+      wakeLockRequestedRef.current = true;
+      setWakeLockActive(true);
+      setWakeLockStatus("Screen will stay awake while this dashboard is open.");
+
+      wakeLockRef.current.addEventListener("release", () => {
+        wakeLockRef.current = null;
+        setWakeLockActive(false);
+        if (wakeLockRequestedRef.current) {
+          setWakeLockStatus("Wake lock paused. It will resume when this tab is visible.");
+        }
+      });
+    } catch (err) {
+      setWakeLockActive(false);
+      setWakeLockStatus("Please disable screen sleep in your device settings.");
+    }
+  }
+
+  useEffect(() => {
+    const reacquireWakeLock = () => {
+      if (
+        document.visibilityState === "visible" &&
+        wakeLockRequestedRef.current &&
+        !wakeLockRef.current
+      ) {
+        requestWakeLock();
+      }
+    };
+
+    document.addEventListener("visibilitychange", reacquireWakeLock);
+    return () => {
+      document.removeEventListener("visibilitychange", reacquireWakeLock);
+      wakeLockRequestedRef.current = false;
+      wakeLockRef.current?.release?.().catch(() => {});
+      wakeLockRef.current = null;
+    };
+  }, []);
 
   if (!user || user.role !== "admin") {
     go("admin-login");
@@ -71,6 +121,23 @@ function AdminDashboard({ user, go }) {
         </div>
 
         <div className="flex flex-col items-start gap-3 sm:items-end">
+          <button
+            type="button"
+            onClick={requestWakeLock}
+            className={`rounded-full px-5 py-3 text-sm font-black transition active:scale-95 ${
+              wakeLockActive
+                ? "border border-emerald-500/30 bg-emerald-500/10 text-emerald-200"
+                : "border border-[#ff5b00]/40 bg-[#ff5b00] text-white hover:bg-orange-600"
+            }`}
+          >
+            {wakeLockActive ? "Screen Awake Enabled" : "Keep Screen Awake"}
+          </button>
+          {wakeLockStatus && (
+            <p className="max-w-xs text-right text-xs font-bold text-white/55">
+              {wakeLockStatus}
+            </p>
+          )}
+
           {installed ? (
             <div className="rounded-full border border-emerald-500/30 bg-emerald-500/10 px-5 py-3 text-sm font-black text-emerald-200">
               ✓ App installed
