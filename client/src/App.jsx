@@ -814,7 +814,7 @@ function Header({ page, go, count, user, settings, shopStatus, activeOffer, setA
           {user?.role === "admin" && (
             <button
               onClick={() => go("admin")}
-              className="rounded-full border border-[#ff5b00]/40 px-5 py-3 text-sm font-bold text-[#ff5b00] hover:bg-[#ff5b00] hover:text-white sm:block"
+              className="hidden rounded-full border border-[#ff5b00]/40 px-5 py-3 text-sm font-bold text-[#ff5b00] hover:bg-[#ff5b00] hover:text-white sm:block"
             >
               Admin
             </button>
