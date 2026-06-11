@@ -50,6 +50,18 @@ function transactionId(order) {
   );
 }
 
+function isPendingOrderStatus(status) {
+  return status === "Pending" || status === "New";
+}
+
+function isAcceptedOrderStatus(status) {
+  return status === "Accepted";
+}
+
+function isRejectedOrderStatus(status) {
+  return status === "Cancelled" || status === "Rejected";
+}
+
 function escapeHtml(value) {
   return String(value ?? "")
     .replaceAll("&", "&amp;")
@@ -118,6 +130,7 @@ export default function AdminOrders() {
   const knownOrderIdsRef = useRef(new Set());
   const initialisedRef = useRef(false);
   const continuousRingRef = useRef(null);
+  const autoPrintedAcceptedIdsRef = useRef(new Set());
 
   if (!ringtoneRef.current) ringtoneRef.current = createRingtone();
 
@@ -172,6 +185,22 @@ export default function AdminOrders() {
   }, [status]);
 
   useEffect(() => {
+    const syncUpdatedOrder = (event) => {
+      const updated = event.detail;
+      if (!updated?._id) return;
+      setOrders((current) =>
+        current.map((order) => (order._id === updated._id ? updated : order))
+      );
+      knownOrderIdsRef.current.add(updated._id);
+    };
+
+    window.addEventListener("caspian-admin-order-updated", syncUpdatedOrder);
+    return () => {
+      window.removeEventListener("caspian-admin-order-updated", syncUpdatedOrder);
+    };
+  }, []);
+
+  useEffect(() => {
     const id = setInterval(() => loadOrders({ silent: true }), 6000);
     return () => clearInterval(id);
   }, [status, search, soundOn]);
@@ -188,12 +217,26 @@ export default function AdminOrders() {
     }
   }
 
-  async function updateStatus(orderId, newStatus) {
+  async function updateStatus(orderOrId, newStatus) {
+    const orderId = typeof orderOrId === "string" ? orderOrId : orderOrId._id;
+    const previousStatus =
+      typeof orderOrId === "string"
+        ? orders.find((order) => order._id === orderId)?.status
+        : orderOrId.status;
+
     try {
       const updated = await adminApi.updateOrderStatus(orderId, newStatus);
       setOrders((current) =>
         current.map((order) => (order._id === updated._id ? updated : order))
       );
+      if (
+        newStatus === "Accepted" &&
+        previousStatus !== "Accepted" &&
+        !autoPrintedAcceptedIdsRef.current.has(updated._id)
+      ) {
+        autoPrintedAcceptedIdsRef.current.add(updated._id);
+        printReceipt(updated);
+      }
     } catch (err) {
       alert(err.message || "Could not update order");
     }
@@ -759,7 +802,7 @@ export default function AdminOrders() {
               <div className="mt-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <select
                   value={order.status}
-                  onChange={(e) => updateStatus(order._id, e.target.value)}
+                  onChange={(e) => updateStatus(order, e.target.value)}
                   className="rounded-xl border border-white/10 bg-black px-4 py-3 text-white outline-none"
                   data-testid={`status-select-${order._id}`}
                 >
@@ -773,15 +816,17 @@ export default function AdminOrders() {
                 </select>
 
                 <div className="flex flex-wrap gap-3">
+                  {isPendingOrderStatus(order.status) && (
+                    <>
                   <button
-                    onClick={() => updateStatus(order._id, "Accepted")}
+                    onClick={() => updateStatus(order, "Accepted")}
                     className="rounded-xl bg-green-600 px-4 py-3 font-black text-white"
                   >
                     Accept
                   </button>
 
                   <button
-                    onClick={() => updateStatus(order._id, "Cancelled")}
+                    onClick={() => updateStatus(order, "Cancelled")}
                     className="rounded-xl bg-red-600 px-4 py-3 font-black text-white"
                   >
                     Reject
@@ -793,6 +838,17 @@ export default function AdminOrders() {
                   >
                     🖨️ Print
                   </button>
+                    </>
+                  )}
+
+                  {!isPendingOrderStatus(order.status) && !isRejectedOrderStatus(order.status) && (
+                    <button
+                      onClick={() => printReceipt(order)}
+                      className="rounded-xl border border-white/10 px-4 py-3 font-black text-white transition hover:border-[#ff5b00] hover:text-[#ff5b00]"
+                    >
+                      {isAcceptedOrderStatus(order.status) ? "Print Again" : "Print"}
+                    </button>
+                  )}
 
                   {order.paymentProvider === "stripe" && order.paymentStatus !== "Paid" && order.stripeSessionId && (
                     <button

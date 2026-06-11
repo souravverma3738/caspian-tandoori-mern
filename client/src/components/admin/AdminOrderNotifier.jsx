@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { adminApi } from "../../api";
+import { printOrderReceipt } from "./orderReceiptPrinter";
 
 const ACK_KEY = "caspian_acknowledged_order_ids";
 const SOUND_KEY = "caspian_admin_sound_enabled";
@@ -61,6 +62,7 @@ export default function AdminOrderNotifier({ onViewDetails }) {
   const knownIdsRef = useRef(new Set());
   const acknowledgedRef = useRef(new Set(readAcknowledgedIds()));
   const initialisedRef = useRef(false);
+  const autoPrintedAcceptedIdsRef = useRef(new Set());
   const queueIds = useMemo(() => new Set(queue.map((order) => order._id)), [queue]);
   const activeOrder = queue[0];
   const waitingCount = Math.max(0, queue.length - 1);
@@ -175,13 +177,19 @@ export default function AdminOrderNotifier({ onViewDetails }) {
     if (!activeOrder) return;
     stopSound();
     const updated = await adminApi.updateOrderStatus(activeOrder._id, "Accepted");
+    window.dispatchEvent(new CustomEvent("caspian-admin-order-updated", { detail: updated }));
     acknowledge(updated._id);
+    if (!autoPrintedAcceptedIdsRef.current.has(updated._id)) {
+      autoPrintedAcceptedIdsRef.current.add(updated._id);
+      setTimeout(() => printOrderReceipt(updated), 0);
+    }
   }
 
   async function rejectOrder() {
     if (!activeOrder) return;
     stopSound();
     const updated = await adminApi.updateOrderStatus(activeOrder._id, "Cancelled");
+    window.dispatchEvent(new CustomEvent("caspian-admin-order-updated", { detail: updated }));
     acknowledge(updated._id);
   }
 
