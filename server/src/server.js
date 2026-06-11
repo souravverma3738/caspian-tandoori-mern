@@ -11,6 +11,7 @@ import adminRoutes from "./routes/admin.routes.js";
 import { fileURLToPath } from "url";
 import paymentRoutes from "./routes/payment.routes.js";
 import stripeWebhookRoutes from "./routes/stripeWebhook.routes.js";
+import couponRoutes from "./routes/coupon.routes.js";
 import RestaurantSettings from "./models/RestaurantSettings.js";
 import { getShopStatus, quoteDelivery } from "./utils/shop.js";
 
@@ -147,6 +148,7 @@ app.use("/api/auth", authRoutes);
 app.use("/api/users", userRoutes);
 app.use("/api/orders", orderRoutes);
 app.use("/api/payments", paymentRoutes);
+app.use("/api/coupons", couponRoutes);
 
 const PORT = process.env.PORT || 8000;
 app.listen(PORT, () => console.log(`Server running on port ${PORT}`));

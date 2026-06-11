@@ -5,6 +5,7 @@ import RestaurantSettings from "../models/RestaurantSettings.js";
 import { auth } from "../middleware/auth.js";
 import { getShopStatus, quoteDelivery, isScheduledTimeValid } from "../utils/shop.js";
 import { createOrderFromPaidStripeSession } from "../services/stripeOrderConfirmation.js";
+import { calculateDiscount, calculateItemsSubtotal } from "../services/discounts.js";
 
 const router = express.Router();
 
@@ -26,6 +27,7 @@ router.post("/create-checkout-session", auth, async (req, res) => {
       items,
       notes,
       scheduledFor,
+      couponCode,
     } = req.body;
 
     if (!customerName || !phone || !items?.length) {
@@ -65,10 +67,7 @@ router.post("/create-checkout-session", auth, async (req, res) => {
     }
 
     // 2. Server-side compute subtotal.
-    const subtotal = items.reduce(
-      (sum, item) => sum + Number(item.price || 0) * Number(item.qty || 0),
-      0
-    );
+    const subtotal = calculateItemsSubtotal(items);
 
     if (subtotal < Number(settings.minimumOrder || 0) && orderType === "Delivery") {
       return res.status(400).json({
@@ -88,7 +87,19 @@ router.post("/create-checkout-session", auth, async (req, res) => {
       deliveryArea = quote.area;
     }
 
-    const total = Math.round((subtotal + deliveryFee) * 100) / 100;
+    const discount = await calculateDiscount({
+      couponCode,
+      subtotal,
+      userId: req.user._id,
+    });
+    const totalBeforeDiscount = Math.round((subtotal + deliveryFee) * 100) / 100;
+    const finalTotal = Math.max(
+      0,
+      Math.round((totalBeforeDiscount - discount.discountAmount) * 100) / 100
+    );
+    if (finalTotal <= 0) {
+      return res.status(400).json({ message: "Order total must be greater than £0 for online payment." });
+    }
 
     const pendingCheckout = await PendingCheckout.create({
       user: req.user._id,
@@ -100,30 +111,28 @@ router.post("/create-checkout-session", auth, async (req, res) => {
       subtotal,
       deliveryFee,
       deliveryArea,
-      total,
+      couponId: discount.coupon?._id || null,
+      couponCode: discount.coupon?.code || "",
+      discountSource: discount.source,
+      discountType: discount.discountType,
+      discountValue: discount.discountValue,
+      discountAmount: discount.discountAmount,
+      finalTotal,
+      total: finalTotal,
       notes,
       scheduledFor: normalizedScheduledFor,
     });
 
-    const lineItems = items.map((item) => ({
-      price_data: {
-        currency: "gbp",
-        product_data: { name: item.name },
-        unit_amount: Math.round(Number(item.price) * 100),
-      },
-      quantity: item.qty,
-    }));
-
-    if (deliveryFee > 0) {
-      lineItems.push({
+    const lineItems = [
+      {
         price_data: {
           currency: "gbp",
-          product_data: { name: `Delivery to ${deliveryArea}` },
-          unit_amount: Math.round(deliveryFee * 100),
+          product_data: { name: "Caspian Tandoori order" },
+          unit_amount: Math.round(finalTotal * 100),
         },
         quantity: 1,
-      });
-    }
+      },
+    ];
 
     const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
     const session = await stripe.checkout.sessions.create({
@@ -141,7 +150,22 @@ router.post("/create-checkout-session", auth, async (req, res) => {
     pendingCheckout.stripeSessionId = session.id;
     await pendingCheckout.save();
 
-    res.json({ clientSecret: session.client_secret, checkoutId: pendingCheckout._id });
+    res.json({
+      clientSecret: session.client_secret,
+      checkoutId: pendingCheckout._id,
+      summary: {
+        subtotal,
+        deliveryFee,
+        deliveryArea,
+        discountLabel: discount.label,
+        discountSource: discount.source,
+        couponCode: discount.coupon?.code || "",
+        discountType: discount.discountType,
+        discountValue: discount.discountValue,
+        discountAmount: discount.discountAmount,
+        finalTotal,
+      },
+    });
   } catch (err) {
     res.status(500).json({ message: err.message || "Could not create payment" });
   }

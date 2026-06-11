@@ -8,6 +8,7 @@ import {
   userApi,
   adminApi,
   paymentApi,
+  couponApi,
   settingsApi,
 } from "./api";
 import { orderApi } from "./api";
@@ -412,8 +413,10 @@ const [page, setPage] = useState("home");
 };
  const changeQty = (id, amount) => { setCart((prev) => changeItemQuantity(prev, id, amount)); setPlaced(false); };
   const [checkoutClientSecret, setCheckoutClientSecret] = useState(null);
+  const [checkoutSummary, setCheckoutSummary] = useState(null);
   const [checkoutMessage, setCheckoutMessage] = useState("");
   const [settings, setSettings] = useState(null);
+  const [activeOffer, setActiveOffer] = useState(null);
 const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 const [theme, setTheme] = useState("dark");
 
@@ -444,6 +447,7 @@ useEffect(() => {
 }, []);
 useEffect(() => {
   settingsApi.get().then(setSettings).catch(console.error);
+  couponApi.activeOffer().then((data) => setActiveOffer(data.offer)).catch(console.error);
 }, []);
 
 // Detect Stripe return and verify the session (fallback for missing webhook).
@@ -512,7 +516,7 @@ if (authLoading) {
 
   return (
     <div className="min-h-screen bg-[#080808] text-white selection:bg-orange-500/40">
-      <Header page={page} go={go} count={count} user={user} settings={settings} shopStatus={shopStatus} setAuthMode={setAuthMode} setCartOpen={setCartOpen} setMobileOpen={setMobileOpen}/>
+      <Header page={page} go={go} count={count} user={user} settings={settings} shopStatus={shopStatus} activeOffer={activeOffer} setAuthMode={setAuthMode} setCartOpen={setCartOpen} setMobileOpen={setMobileOpen}/>
       {mobileOpen && <MobileNav go={go} user={user} setMobileOpen={setMobileOpen} />}
       <main>
       {page === "home" && <HomePage go={go} settings={settings} shopStatus={shopStatus} />}
@@ -536,6 +540,7 @@ if (authLoading) {
   go={go}
   cart={cart}
   total={total}
+  summary={checkoutSummary}
   orderType={orderType}
   customer={customer}
 />
@@ -558,9 +563,11 @@ if (authLoading) {
     setCustomer={setCustomer}
     placed={placed}
     setPlaced={setPlaced}
-  setCheckoutClientSecret={setCheckoutClientSecret}
+    setCheckoutClientSecret={setCheckoutClientSecret}
+    setCheckoutSummary={setCheckoutSummary}
   checkoutMessage={checkoutMessage}
   setCheckoutMessage={setCheckoutMessage}
+  activeOffer={activeOffer}
   shopStatus={shopStatus}
   settings={settings}
 />
@@ -576,7 +583,17 @@ h1,h2,h3,h4,h5,h6,.font-serif { font-family: 'Playfair Display', serif; }
     </div>
   );
 }
-function CheckoutPage({ clientSecret, go, cart = [], total = 0, orderType, customer }) {
+function CheckoutPage({ clientSecret, go, cart = [], total = 0, summary = null, orderType, customer }) {
+  const subtotal = Number(summary?.subtotal ?? total);
+  const deliveryFee = Number(summary?.deliveryFee || 0);
+  const discountAmount = Number(summary?.discountAmount || 0);
+  const finalTotal = Number(summary?.finalTotal ?? total);
+  const discountLabel = summary?.couponCode
+    ? `Coupon ${summary.couponCode}`
+    : summary?.discountLabel
+      ? `Offer ${summary.discountLabel}`
+      : "Discount";
+
   if (!clientSecret) {
     return (
       <section className="mx-auto max-w-4xl px-5 pb-24 pt-40 text-center">
@@ -631,10 +648,26 @@ function CheckoutPage({ clientSecret, go, cart = [], total = 0, orderType, custo
           </div>
 
           <div className="mt-6 border-t border-white/10 pt-5">
+            <div className="mb-3 flex justify-between text-white/70">
+              <span>Subtotal</span>
+              <span>{formatPrice(subtotal)}</span>
+            </div>
+            {deliveryFee > 0 && (
+              <div className="mb-3 flex justify-between text-white/70">
+                <span>Delivery</span>
+                <span>{formatPrice(deliveryFee)}</span>
+              </div>
+            )}
+            {discountAmount > 0 && (
+              <div className="mb-3 flex justify-between text-emerald-300">
+                <span>{discountLabel}</span>
+                <span>-{formatPrice(discountAmount)}</span>
+              </div>
+            )}
             <div className="flex justify-between text-2xl font-black">
               <span>Total</span>
               <span className="text-[#ff5b00]">
-                £{Number(total).toFixed(2)}
+                {formatPrice(finalTotal)}
               </span>
             </div>
 
@@ -674,7 +707,7 @@ function CheckoutPage({ clientSecret, go, cart = [], total = 0, orderType, custo
     </section>
   );
 }
-function Header({ page, go, count, user, settings, shopStatus, setAuthMode, setCartOpen, setMobileOpen }) {
+function Header({ page, go, count, user, settings, shopStatus, activeOffer, setAuthMode, setCartOpen, setMobileOpen }) {
   const links = [["Home", "home"], ["Menu", "menu"], ["About", "about"], ["Contact", "contact"]];
   const openAuth = (mode) => {
     setAuthMode(mode);
@@ -707,6 +740,22 @@ function Header({ page, go, count, user, settings, shopStatus, setAuthMode, setC
               {shopStatus.acceptScheduledOrders && " · pre-order available"}
             </>
           )}
+        </div>
+      )}
+      {activeOffer && (
+        <div className="border-y border-[#1a0f0a]/20 bg-[#F26B1F] px-4 py-2 text-center text-[#1a0f0a] shadow-[inset_0_1px_0_rgba(255,255,255,0.18)]">
+          <span className="inline-flex flex-wrap items-center justify-center gap-x-2 gap-y-1 text-sm font-semibold">
+            <span className="rounded-full bg-white px-2.5 py-0.5 text-[11px] font-black uppercase tracking-[0.16em] text-[#1a0f0a]">
+              Offer
+            </span>
+            <span className="font-black">
+              {activeOffer.title || "Website offer"}
+            </span>
+            <span className="font-medium">
+              {activeOffer.description ||
+                `${activeOffer.discountValue}${activeOffer.discountType === "percentage" ? "% off" : " off"}`}
+            </span>
+          </span>
         </div>
       )}
       <div className="mx-auto flex max-w-7xl items-center justify-between px-5 py-5 lg:px-8">
@@ -1849,8 +1898,10 @@ function CartDrawer({
   placed,
   setPlaced,
   setCheckoutClientSecret,
+  setCheckoutSummary,
   checkoutMessage,
   setCheckoutMessage,
+  activeOffer,
   shopStatus,
   settings,
 }) {
@@ -1869,6 +1920,9 @@ function CartDrawer({
   const [scheduledFor, setScheduledFor] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
+  const [couponInput, setCouponInput] = useState("");
+  const [appliedCoupon, setAppliedCoupon] = useState(null);
+  const [couponMessage, setCouponMessage] = useState("");
 
   const isOpen = shopStatus?.isOpen;
   const acceptsScheduled = shopStatus?.acceptScheduledOrders !== false;
@@ -1915,6 +1969,24 @@ function CartDrawer({
   const deliveryFee = orderType === "Delivery" && deliveryQuote?.deliverable ? Number(deliveryQuote.fee || 0) : 0;
   const subtotal = total;
   const grandTotal = subtotal + deliveryFee;
+  const discountAmount = Number(appliedCoupon?.discountAmount || 0);
+  const activeOfferMin = Number(activeOffer?.minOrderAmount || 0);
+  const activeOfferEligible = Boolean(activeOffer) && subtotal >= activeOfferMin;
+  const activeOfferPreviewDiscount = activeOfferEligible
+    ? activeOffer.discountType === "percentage"
+      ? Math.min(subtotal, Math.round(subtotal * (Number(activeOffer.discountValue || 0) / 100) * 100) / 100)
+      : Math.min(subtotal, Number(activeOffer.discountValue || 0))
+    : 0;
+  const activeOfferSpendMore = Math.max(0, activeOfferMin - subtotal);
+  const automaticOfferDiscount =
+    !appliedCoupon?.code && activeOfferEligible ? activeOfferPreviewDiscount : 0;
+  const displayDiscountAmount = discountAmount || automaticOfferDiscount;
+  const finalTotal = Math.max(0, grandTotal - displayDiscountAmount);
+
+  useEffect(() => {
+    setAppliedCoupon(null);
+    setCouponMessage("");
+  }, [cart, orderType, customer.address]);
 
   // Default scheduled time = next opening or now + 30m, formatted as datetime-local.
   function toDatetimeLocal(date) {
@@ -1929,6 +2001,12 @@ function CartDrawer({
       : new Date(Date.now() + 30 * 60 * 1000);
     setScheduledFor(toDatetimeLocal(base));
   }, [shopStatus, isOpen, scheduledFor]);
+
+  useEffect(() => {
+    if (activeOffer && cart.length > 0 && !appliedCoupon && !couponInput) {
+      applyWebsiteOffer();
+    }
+  }, [activeOffer, cart.length, deliveryFee, orderType, customer.address]);
 
   async function submitOrder(e) {
     e.preventDefault();
@@ -1976,15 +2054,68 @@ function CartDrawer({
         })),
         notes: customer.notes,
         scheduledFor: scheduleMode === "schedule" ? new Date(scheduledFor).toISOString() : null,
+        couponCode: appliedCoupon?.source === "coupon" ? appliedCoupon.code || couponInput : "",
       });
 
       setCheckoutClientSecret(data.clientSecret);
+      setCheckoutSummary(data.summary || null);
       setCartOpen(false);
       go("checkout");
     } catch (err) {
       setError(err.message || "Payment could not start.");
     } finally {
       setSubmitting(false);
+    }
+  }
+
+  async function applyCoupon() {
+    setCouponMessage("");
+    setError("");
+    if (!user) {
+      setCartOpen(false);
+      go("auth");
+      return;
+    }
+    try {
+      const result = await couponApi.validate({
+        code: couponInput,
+        orderType,
+        address: orderType === "Delivery" ? customer.address : null,
+        items: cart.map((item) => ({
+          name: item.name,
+          price: item.price,
+          qty: item.qty,
+          category: item.category,
+        })),
+      });
+      setAppliedCoupon(result);
+      setCouponMessage(result.discountAmount > 0 ? "Coupon applied successfully." : result.message);
+    } catch (err) {
+      setAppliedCoupon(null);
+      setCouponMessage(err.message || "Invalid coupon code");
+    }
+  }
+
+  async function applyWebsiteOffer() {
+    if (!user || couponInput || appliedCoupon) return;
+    try {
+      const result = await couponApi.validate({
+        code: "",
+        orderType,
+        address: orderType === "Delivery" ? customer.address : null,
+        items: cart.map((item) => ({
+          name: item.name,
+          price: item.price,
+          qty: item.qty,
+          category: item.category,
+        })),
+      });
+      if (result.discountAmount > 0) {
+        setAppliedCoupon(result);
+        setCouponMessage("Website offer applied automatically.");
+      }
+    } catch {
+      /* website offer is optional */
     }
   }
 
@@ -2071,10 +2202,69 @@ function CartDrawer({
                   </span>
                 </div>
               )}
+              {displayDiscountAmount > 0 && (
+                <div className="mt-2 flex justify-between text-emerald-300">
+                  <span>
+                    {appliedCoupon?.code
+                      ? `Coupon ${appliedCoupon.code}`
+                      : `Offer ${activeOffer?.title || "Website discount"}`}
+                  </span>
+                  <span>-{formatPrice(displayDiscountAmount)}</span>
+                </div>
+              )}
+              {activeOffer && !activeOfferEligible && !appliedCoupon?.code && (
+                <div className="mt-2 rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-sm font-bold text-amber-200">
+                  {activeOffer.title || "Website offer"} available. Spend{" "}
+                  {formatPrice(activeOfferSpendMore)} more to use it.
+                </div>
+              )}
               <div className="mt-3 flex items-center justify-between text-2xl font-black">
-                <span>Total</span>
-                <span className="text-[#ff5b00]" data-testid="cart-total">{formatPrice(grandTotal)}</span>
+                <span>Total to pay</span>
+                <span className="text-[#ff5b00]" data-testid="cart-total">{formatPrice(finalTotal)}</span>
               </div>
+            </div>
+
+            <div className="mb-5 rounded-2xl border border-white/10 bg-white/5 p-4">
+              <p className="mb-3 text-sm font-black text-white">Have a coupon code?</p>
+              <div className="flex gap-2">
+                <input
+                  value={couponInput}
+                  onChange={(e) => setCouponInput(e.target.value.toUpperCase())}
+                  placeholder="Enter coupon code"
+                  className="min-w-0 flex-1 rounded-xl border border-white/10 bg-black/40 p-3 text-white outline-none focus:ring-2 focus:ring-[#ff5b00]"
+                />
+                <button
+                  type="button"
+                  onClick={applyCoupon}
+                  className="rounded-xl bg-[#ff5b00] px-4 py-3 font-black text-white"
+                >
+                  Apply
+                </button>
+              </div>
+              {appliedCoupon && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setAppliedCoupon(null);
+                    setCouponInput("");
+                    setCouponMessage("");
+                  }}
+                  className="mt-3 text-sm font-black text-orange-300"
+                >
+                  Remove coupon
+                </button>
+              )}
+              {couponMessage && (
+                <p
+                  className={`mt-3 rounded-xl p-3 text-sm font-bold ${
+                    appliedCoupon?.discountAmount > 0
+                      ? "bg-emerald-500/10 text-emerald-200"
+                      : "bg-red-500/10 text-red-200"
+                  }`}
+                >
+                  {couponMessage}
+                </p>
+              )}
             </div>
 
             {placed ? (

@@ -1,5 +1,6 @@
 import Order from "../models/Order.js";
 import PendingCheckout from "../models/PendingCheckout.js";
+import { incrementCouponUse } from "./discounts.js";
 
 function pennies(value) {
   return Math.round(Number(value || 0) * 100);
@@ -40,6 +41,13 @@ export async function createOrderFromPaidStripeSession(session) {
     subtotal: pending.subtotal,
     deliveryFee: pending.deliveryFee,
     deliveryArea: pending.deliveryArea,
+    couponId: pending.couponId,
+    couponCode: pending.couponCode,
+    discountSource: pending.discountSource,
+    discountType: pending.discountType,
+    discountValue: pending.discountValue,
+    discountAmount: pending.discountAmount,
+    finalTotal: pending.finalTotal,
     total: pending.total,
     notes: pending.notes,
     scheduledFor: pending.scheduledFor,
@@ -55,6 +63,7 @@ export async function createOrderFromPaidStripeSession(session) {
   pending.status = "paid";
   pending.completedOrder = order._id;
   await pending.save();
+  await incrementCouponUse(pending.couponId);
 
   return { order, created: true, reason: "created" };
 }

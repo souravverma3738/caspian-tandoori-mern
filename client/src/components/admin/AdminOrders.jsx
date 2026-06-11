@@ -259,6 +259,7 @@ export default function AdminOrders() {
       : "ASAP";
     const paymentLabel = paymentMethodLabel(order);
     const transaction = transactionId(order);
+    const discountLabel = order.couponCode || (order.discountSource === "website_offer" ? "Website offer" : "");
 
     const itemsHtml = order.items
       .map((item) => {
@@ -464,7 +465,8 @@ export default function AdminOrders() {
     <div class="section totals">
       <div class="row"><span>Subtotal</span><span>${escapeHtml(money(order.subtotal || 0))}</span></div>
       ${Number(order.deliveryFee) > 0 ? `<div class="row"><span>Delivery${order.deliveryArea ? ` (${escapeHtml(order.deliveryArea)})` : ""}</span><span>${escapeHtml(money(order.deliveryFee))}</span></div>` : ""}
-      <div class="row grand-total"><span>TOTAL</span><span>${escapeHtml(money(order.total))}</span></div>
+      ${Number(order.discountAmount || 0) > 0 ? `<div class="row"><span>Discount ${escapeHtml(discountLabel)}</span><span>-${escapeHtml(money(order.discountAmount))}</span></div>` : ""}
+      <div class="row grand-total"><span>TOTAL PAID</span><span>${escapeHtml(money(order.finalTotal || order.total))}</span></div>
     </div>
 
     ${order.notes ? `
@@ -714,9 +716,17 @@ export default function AdminOrders() {
                         <span>{money(order.deliveryFee)}</span>
                       </div>
                     )}
+                    {order.discountAmount > 0 && (
+                      <div className="flex justify-between text-emerald-300">
+                        <span>
+                          Discount {order.couponCode || order.discountSource || ""}
+                        </span>
+                        <span>-{money(order.discountAmount)}</span>
+                      </div>
+                    )}
                     <div className="flex justify-between font-black text-white">
-                      <span>Total</span>
-                      <span>{money(order.total)}</span>
+                      <span>Final paid</span>
+                      <span>{money(order.finalTotal || order.total)}</span>
                     </div>
                   </div>
                 )}

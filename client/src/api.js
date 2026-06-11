@@ -131,6 +131,33 @@ export const paymentApi = {
     apiRequest(`/payments/verify-session/${encodeURIComponent(sessionId)}`),
 };
 
+export const couponApi = {
+  activeOffer: () => apiRequest("/coupons/active-offer"),
+  validate: (payload) =>
+    apiRequest("/coupons/validate", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+};
+
+export const adminCouponApi = {
+  list: () => apiRequest("/admin/coupons"),
+  create: (payload) =>
+    apiRequest("/admin/coupons", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+  update: (couponId, payload) =>
+    apiRequest(`/admin/coupons/${couponId}`, {
+      method: "PUT",
+      body: JSON.stringify(payload),
+    }),
+  deactivate: (couponId) =>
+    apiRequest(`/admin/coupons/${couponId}/deactivate`, { method: "PATCH" }),
+  remove: (couponId) =>
+    apiRequest(`/admin/coupons/${couponId}`, { method: "DELETE" }),
+};
+
 export const adminPaymentApi = {
   verifySession: paymentApi.verifySession,
 };

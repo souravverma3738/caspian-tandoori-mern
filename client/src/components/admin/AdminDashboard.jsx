@@ -7,6 +7,7 @@ import AdminTemperatures from "./AdminTemperatures";
 import AdminReports from "./AdminReports";
 import AdminSettings from "./AdminSettings";
 import AdminOrderNotifier from "./AdminOrderNotifier";
+import AdminCoupons from "./AdminCoupons";
 
 function AdminDashboard({ user, go }) {
   const [activeTab, setActiveTab] = useState("dashboard");
@@ -47,6 +48,7 @@ function AdminDashboard({ user, go }) {
     ["dashboard", "Dashboard"],
     ["orders", "Orders"],
     ["customers", "Customers"],
+    ["coupons", "Coupons"],
     ["clock", "Clock In / Out"],
     ["temperatures", "Temperatures"],
     ["reports", "Reports"],
@@ -112,6 +114,7 @@ function AdminDashboard({ user, go }) {
           {activeTab === "dashboard" && <AdminOverview />}
           {activeTab === "orders" && <AdminOrders />}
           {activeTab === "customers" && <AdminCustomers />}
+          {activeTab === "coupons" && <AdminCoupons />}
           {activeTab === "clock" && <AdminClockInOut />}
           {activeTab === "temperatures" && <AdminTemperatures />}
           {activeTab === "reports" && <AdminReports />}

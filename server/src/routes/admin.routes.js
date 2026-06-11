@@ -6,6 +6,8 @@ import { adminOnly } from "../middleware/admin.js";
 import StaffAttendance from "../models/StaffAttendance.js";
 import TemperatureLog from "../models/TemperatureLog.js";
 import RestaurantSettings from "../models/RestaurantSettings.js";
+import Coupon from "../models/Coupon.js";
+import { couponStatus } from "../services/discounts.js";
 
 const router = express.Router();
 
@@ -85,6 +87,80 @@ router.get("/orders", async (req, res) => {
 
   res.json(orders);
 });
+
+router.get("/coupons", async (req, res) => {
+  const coupons = await Coupon.find().sort({ createdAt: -1 });
+  res.json(coupons.map((coupon) => ({ ...coupon.toObject(), statusLabel: couponStatus(coupon) })));
+});
+
+router.post("/coupons", async (req, res) => {
+  try {
+    const payload = normaliseCouponPayload(req.body);
+    const coupon = await Coupon.create(payload);
+    res.status(201).json({ ...coupon.toObject(), statusLabel: couponStatus(coupon) });
+  } catch (err) {
+    res.status(400).json({ message: err.message || "Could not create coupon" });
+  }
+});
+
+router.put("/coupons/:id", async (req, res) => {
+  try {
+    const payload = normaliseCouponPayload(req.body);
+    const coupon = await Coupon.findByIdAndUpdate(req.params.id, payload, {
+      new: true,
+      runValidators: true,
+    });
+    if (!coupon) return res.status(404).json({ message: "Coupon not found" });
+    res.json({ ...coupon.toObject(), statusLabel: couponStatus(coupon) });
+  } catch (err) {
+    res.status(400).json({ message: err.message || "Could not update coupon" });
+  }
+});
+
+router.patch("/coupons/:id/deactivate", async (req, res) => {
+  const coupon = await Coupon.findByIdAndUpdate(
+    req.params.id,
+    { isActive: false },
+    { new: true }
+  );
+  if (!coupon) return res.status(404).json({ message: "Coupon not found" });
+  res.json({ ...coupon.toObject(), statusLabel: couponStatus(coupon) });
+});
+
+router.delete("/coupons/:id", async (req, res) => {
+  const coupon = await Coupon.findByIdAndDelete(req.params.id);
+  if (!coupon) return res.status(404).json({ message: "Coupon not found" });
+  res.json({ ok: true });
+});
+
+function normaliseCouponPayload(body) {
+  const isWebsiteOffer = Boolean(body.isWebsiteOffer);
+  const code = isWebsiteOffer ? "" : String(body.code || "").trim().toUpperCase();
+  if (!isWebsiteOffer && !code) throw new Error("Coupon code is required");
+  if (!["percentage", "fixed"].includes(body.discountType)) {
+    throw new Error("Discount type must be percentage or fixed");
+  }
+  const discountValue = Number(body.discountValue);
+  if (!discountValue || discountValue <= 0) throw new Error("Discount value must be greater than 0");
+  if (body.discountType === "percentage" && discountValue > 100) {
+    throw new Error("Percentage discount cannot exceed 100");
+  }
+
+  return {
+    code,
+    title: String(body.title || "").trim(),
+    description: String(body.description || "").trim(),
+    discountType: body.discountType,
+    discountValue,
+    minOrderAmount: Number(body.minOrderAmount || 0),
+    startDate: body.startDate ? new Date(body.startDate) : null,
+    expiryDate: body.expiryDate ? new Date(body.expiryDate) : null,
+    usageLimit: body.usageLimit ? Number(body.usageLimit) : null,
+    perCustomerUsageLimit: body.perCustomerUsageLimit ? Number(body.perCustomerUsageLimit) : null,
+    isActive: body.isActive !== false,
+    isWebsiteOffer,
+  };
+}
 router.patch("/orders/:id/status", async (req, res) => {
   const { status } = req.body;
 
