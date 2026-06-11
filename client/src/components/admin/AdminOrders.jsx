@@ -50,6 +50,15 @@ function transactionId(order) {
   );
 }
 
+function escapeHtml(value) {
+  return String(value ?? "")
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#039;");
+}
+
 function timeAgo(dateString) {
   if (!dateString) return "";
   const diffMs = Date.now() - new Date(dateString).getTime();
@@ -229,308 +238,255 @@ export default function AdminOrders() {
     })();
 
     const isDelivery = order.orderType === "Delivery";
-    const isPaid = order.paymentStatus === "Paid";
     const shortId = order._id.slice(-6).toUpperCase();
-    const dateStr = formatOrderTime(order.createdAt);
+    const orderDate = new Date(order.createdAt).toLocaleString("en-GB", {
+      day: "2-digit",
+      month: "2-digit",
+      year: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: false,
+    });
     const scheduledStr = order.scheduledFor
       ? new Date(order.scheduledFor).toLocaleString("en-GB", {
-          weekday: "short", day: "2-digit", month: "short",
-          year: "numeric", hour: "2-digit", minute: "2-digit", hour12: false,
+          weekday: "short",
+          day: "2-digit",
+          month: "short",
+          hour: "2-digit",
+          minute: "2-digit",
+          hour12: false,
         })
-      : null;
+      : "ASAP";
+    const paymentLabel = paymentMethodLabel(order);
+    const transaction = transactionId(order);
 
     const itemsHtml = order.items
-      .map(
-        (item) => `
-        <tr>
-          <td style="padding:7px 0; vertical-align:top;">
-            <span style="display:inline-block; background:#1a1a1a; color:#fff; font-size:11px; font-weight:700; border-radius:4px; padding:1px 7px; margin-right:6px;">${item.qty}&times;</span>
-            <span style="font-size:13.5px; font-weight:600; color:#111;">${item.name}</span>
-            ${item.category ? `<br><span style="font-size:11px; color:#888; margin-left:26px;">${item.category}</span>` : ""}
-          </td>
-          <td style="padding:7px 0; text-align:right; vertical-align:top; font-size:13.5px; font-weight:700; color:#111; white-space:nowrap;">${money(item.price * item.qty)}</td>
-        </tr>`
-      )
+      .map((item) => {
+        const lineTotal = money(Number(item.price || 0) * Number(item.qty || 0));
+        return `
+          <div class="item">
+            <div class="item-main">
+              <span class="qty">${escapeHtml(item.qty)}x</span>
+              <span class="item-name">${escapeHtml(item.name)}</span>
+            </div>
+            <div class="item-price">${escapeHtml(lineTotal)}</div>
+            ${item.category ? `<div class="item-note">${escapeHtml(item.category)}</div>` : ""}
+          </div>`;
+      })
       .join("");
 
-    const barsHtml = [18,12,22,10,20,14,24,8,18,16,22,10,20,26,12,18,14,22,10,24,16,20,12,18,22,8,14,20,18,24,10,16,22,12,20,18,14,22]
-      .map((h, i) => {
-        const w = i % 3 === 0 ? 3 : i % 5 === 0 ? 2 : 1;
-        return `<div style="width:${w}px;height:${h}px;background:#222;border-radius:1px;flex-shrink:0;"></div>`;
-      })
+    const addressHtml = addressLines
+      .map((line) => `<div>${escapeHtml(line)}</div>`)
       .join("");
 
     const html = `<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>Order Receipt #${shortId}</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Order #${escapeHtml(shortId)}</title>
   <style>
-    * { box-sizing: border-box; margin: 0; padding: 0; }
-    body {
-      font-family: 'DM Sans', system-ui, sans-serif;
-      background: #f0ede8;
-      display: flex;
-      justify-content: center;
-      align-items: flex-start;
-      min-height: 100vh;
-      padding: 32px 16px 64px;
-    }
-    .receipt {
-      width: 360px;
-      background: #fff;
-      border-radius: 20px;
-      overflow: hidden;
-      box-shadow: 0 12px 48px rgba(0,0,0,0.14), 0 2px 6px rgba(0,0,0,0.07);
-    }
-    .header {
-      background: #111;
-      color: #fff;
-      padding: 24px 24px 20px;
-    }
-    .header-brand {
-      font-size: 10.5px;
-      font-weight: 700;
-      letter-spacing: 0.2em;
-      text-transform: uppercase;
-      color: #ff5b00;
-      margin-bottom: 8px;
-    }
-    .header-ordernum {
-      font-size: 26px;
-      font-weight: 800;
-      letter-spacing: -0.5px;
-    }
-    .header-date {
-      font-size: 11px;
-      color: #888;
-      margin-top: 3px;
-      font-family: 'DM Mono', monospace;
-      letter-spacing: 0.02em;
-    }
-    .payment-badge {
-      display: inline-flex;
-      align-items: center;
-      gap: 5px;
-      margin-top: 14px;
-      padding: 5px 14px;
-      border-radius: 999px;
-      font-size: 11px;
-      font-weight: 700;
-      letter-spacing: 0.07em;
-      text-transform: uppercase;
-    }
-    .badge-paid   { background: rgba(16,185,129,0.18); color: #10b981; border: 1px solid rgba(16,185,129,0.35); }
-    .badge-unpaid { background: rgba(255,91,0,0.15);   color: #ff5b00; border: 1px solid rgba(255,91,0,0.3); }
-    .type-strip {
-      padding: 11px 24px;
-      display: flex;
-      align-items: center;
-      gap: 10px;
-      font-size: 13px;
-      font-weight: 700;
-      letter-spacing: 0.03em;
-      color: #fff;
-    }
-    .type-delivery   { background: #ff5b00; }
-    .type-collection { background: #1a1a1a; }
-    .body { padding: 4px 0; }
-    .section {
-      padding: 14px 24px;
-      border-bottom: 1px dashed #eaeaea;
-    }
-    .section:last-child { border-bottom: none; }
-    .sec-label {
-      font-size: 9.5px;
-      font-weight: 700;
-      letter-spacing: 0.18em;
-      text-transform: uppercase;
-      color: #bbb;
-      margin-bottom: 7px;
-    }
-    .cust-name {
-      font-size: 18px;
-      font-weight: 800;
-      color: #111;
-      letter-spacing: -0.4px;
-    }
-    .cust-detail {
-      font-size: 12.5px;
-      color: #666;
-      margin-top: 3px;
-      font-family: 'DM Mono', monospace;
-    }
-    .addr-line {
-      font-size: 13px;
-      color: #333;
-      line-height: 1.7;
-    }
-    .items-table { width: 100%; border-collapse: collapse; }
-    .item-sep {
-      border: none;
-      border-top: 1px solid #f2f2f2;
+    @page {
+      size: 80mm auto;
       margin: 0;
     }
-    .total-divider {
-      border: none;
-      border-top: 1.5px solid #111;
-      margin: 10px 0 0;
+    * {
+      box-sizing: border-box;
     }
-    .sub-row td { font-size: 13px; color: #666; padding: 3px 0; }
-    .sub-row td:last-child { text-align: right; }
-    .total-row td { font-size: 17px; font-weight: 800; color: #111; padding-top: 10px; }
-    .total-row td:last-child { text-align: right; color: #ff5b00; }
-    .notes-box {
-      background: #fafaf8;
-      border: 1px solid #ebebeb;
-      border-radius: 9px;
-      padding: 10px 13px;
-      font-size: 13px;
-      color: #444;
-      line-height: 1.6;
+    html,
+    body {
+      margin: 0;
+      padding: 0;
+      background: #fff;
+      color: #000;
+      font-family: "Courier New", Consolas, monospace;
+      font-size: 12px;
+      line-height: 1.25;
     }
-    .sched-box {
-      background: #fffcf0;
-      border: 1.5px solid #ffd60a;
-      border-radius: 9px;
-      padding: 9px 13px;
-      font-size: 13px;
-      font-weight: 600;
-      color: #7a5c00;
+    .receipt {
+      width: 80mm;
+      max-width: 80mm;
+      padding: 3mm;
+      background: #fff;
     }
-    .footer {
-      background: #f7f6f3;
-      border-top: 1px dashed #e0e0e0;
-      padding: 18px 24px 6px;
+    .center { text-align: center; }
+    .right { text-align: right; }
+    .bold { font-weight: 900; }
+    .brand {
+      font-size: 19px;
+      font-weight: 900;
+      text-transform: uppercase;
+    }
+    .order-no {
+      margin-top: 3mm;
+      border: 2px solid #000;
+      padding: 2mm;
+      font-size: 22px;
+      font-weight: 900;
       text-align: center;
     }
-    .barcode {
+    .service-type {
+      margin-top: 2mm;
+      padding: 2mm 1mm;
+      background: #000;
+      color: #fff;
+      font-size: 18px;
+      font-weight: 900;
+      text-align: center;
+      text-transform: uppercase;
+    }
+    .scheduled {
+      margin-top: 2mm;
+      border: 2px solid #000;
+      padding: 2mm;
+      font-size: 16px;
+      font-weight: 900;
+      text-align: center;
+    }
+    .section {
+      border-top: 1px dashed #000;
+      margin-top: 3mm;
+      padding-top: 2mm;
+    }
+    .label {
+      font-size: 11px;
+      font-weight: 900;
+      text-transform: uppercase;
+      margin-bottom: 1mm;
+    }
+    .large {
+      font-size: 16px;
+      font-weight: 900;
+    }
+    .row {
       display: flex;
-      gap: 2px;
-      justify-content: center;
-      align-items: flex-end;
-      height: 32px;
-      margin-bottom: 10px;
+      justify-content: space-between;
+      gap: 2mm;
     }
-    .footer-id {
-      font-family: 'DM Mono', monospace;
-      font-size: 10.5px;
-      color: #bbb;
-      letter-spacing: 0.09em;
-      margin-bottom: 4px;
+    .item {
+      border-bottom: 1px dotted #000;
+      padding: 2mm 0;
     }
-    .footer-thanks {
+    .item-main {
+      display: flex;
+      gap: 2mm;
+      font-size: 15px;
+      font-weight: 900;
+    }
+    .qty {
+      min-width: 8mm;
+    }
+    .item-name {
+      flex: 1;
+      overflow-wrap: anywhere;
+    }
+    .item-price {
+      margin-top: 1mm;
+      text-align: right;
       font-size: 13px;
-      font-weight: 700;
-      color: #444;
-      margin-bottom: 18px;
+      font-weight: 900;
+    }
+    .item-note {
+      margin-left: 10mm;
+      font-size: 11px;
+    }
+    .totals {
+      font-size: 13px;
+      font-weight: 900;
+    }
+    .grand-total {
+      border-top: 2px solid #000;
+      margin-top: 1mm;
+      padding-top: 1mm;
+      font-size: 18px;
+      font-weight: 900;
+    }
+    .notes {
+      border: 2px solid #000;
+      padding: 2mm;
+      font-size: 14px;
+      font-weight: 900;
+      overflow-wrap: anywhere;
     }
     .print-btn {
       display: block;
-      width: calc(100% - 48px);
-      margin: 0 24px 20px;
-      padding: 14px;
-      background: #111;
+      width: calc(100% - 6mm);
+      margin: 4mm 3mm;
+      padding: 3mm;
+      border: 0;
+      background: #000;
       color: #fff;
-      border: none;
-      border-radius: 12px;
-      font-family: 'DM Sans', sans-serif;
-      font-size: 14px;
-      font-weight: 700;
+      font: 900 14px Arial, sans-serif;
       cursor: pointer;
-      letter-spacing: 0.04em;
-      transition: background 0.2s;
     }
-    .print-btn:hover { background: #ff5b00; }
     @media print {
-      body { background: #fff; padding: 0; }
-      .receipt { box-shadow: none; border-radius: 0; width: 100%; }
       .print-btn { display: none !important; }
-      .footer { background: #fff; }
+      .receipt { width: 80mm; max-width: 80mm; }
     }
   </style>
 </head>
 <body>
   <div class="receipt">
+    <div class="center brand">CASPIAN TANDOORI</div>
+    <div class="center">26 Main Street, Kelty</div>
+    <div class="center">01383 830 166</div>
 
-    <div class="header">
-      <div class="header-brand">&#127829; Caspian Tandoori</div>
-      <div class="header-ordernum">Order #${shortId}</div>
-      <div class="header-date">${dateStr}</div>
-      <div class="payment-badge ${isPaid ? "badge-paid" : "badge-unpaid"}">
-        ${isPaid ? "&#10003;&nbsp; Payment Confirmed" : "&#9203;&nbsp; " + (order.paymentStatus || "Payment Pending")}
-      </div>
+    <div class="order-no">ORDER #${escapeHtml(shortId)}</div>
+    <div class="service-type">${escapeHtml(isDelivery ? "Delivery" : "Collection")}</div>
+    <div class="scheduled">${escapeHtml(scheduledStr)}</div>
+
+    <div class="section">
+      <div class="row"><span>Placed</span><span>${escapeHtml(orderDate)}</span></div>
+      <div class="row"><span>Status</span><span>${escapeHtml(order.status || "")}</span></div>
+      <div class="row"><span>Payment</span><span>${escapeHtml(order.paymentStatus || "Pending")}</span></div>
+      <div class="row"><span>Method</span><span>${escapeHtml(paymentLabel)}</span></div>
+      ${transaction ? `<div>Txn: ${escapeHtml(transaction)}</div>` : ""}
     </div>
 
-    <div class="type-strip ${isDelivery ? "type-delivery" : "type-collection"}">
-      ${isDelivery ? "&#128693;&nbsp; Delivery Order" : "&#127978;&nbsp; Collection &mdash; Pick up in store"}
+    <div class="section">
+      <div class="label">Customer</div>
+      <div class="large">${escapeHtml(order.customerName)}</div>
+      <div class="large">${escapeHtml(order.phone)}</div>
+      ${order.user?.email ? `<div>${escapeHtml(order.user.email)}</div>` : ""}
     </div>
 
-    <div class="body">
+    ${isDelivery && addressLines.length ? `
+    <div class="section">
+      <div class="label">Delivery address</div>
+      <div class="large">${addressHtml}</div>
+    </div>` : ""}
 
-      <div class="section">
-        <div class="sec-label">Customer</div>
-        <div class="cust-name">${order.customerName}</div>
-        <div class="cust-detail">&#128222; ${order.phone}</div>
-        ${order.user?.email ? `<div class="cust-detail">&#9993; ${order.user.email}</div>` : ""}
-      </div>
-
-      ${isDelivery && addressLines.length ? `
-      <div class="section">
-        <div class="sec-label">Deliver to</div>
-        <div class="addr-line">${addressLines.join("<br>")}</div>
-      </div>` : ""}
-
-      ${scheduledStr ? `
-      <div class="section">
-        <div class="sec-label">Scheduled for</div>
-        <div class="sched-box">&#128197; ${scheduledStr}</div>
-      </div>` : ""}
-
-      <div class="section">
-        <div class="sec-label">Items ordered</div>
-        <table class="items-table">${itemsHtml}</table>
-      </div>
-
-      <div class="section">
-        <table style="width:100%;border-collapse:collapse;">
-          <tr class="sub-row"><td>Subtotal</td><td>${money(order.subtotal || 0)}</td></tr>
-          ${Number(order.deliveryFee) > 0 ? `<tr class="sub-row"><td>Delivery${order.deliveryArea ? ` (${order.deliveryArea})` : ""}</td><td>${money(order.deliveryFee)}</td></tr>` : ""}
-          <tr><td colspan="2"><hr class="total-divider"></td></tr>
-          <tr class="total-row"><td>Total paid</td><td>${money(order.total)}</td></tr>
-        </table>
-      </div>
-
-      ${order.notes ? `
-      <div class="section">
-        <div class="sec-label">Order notes</div>
-        <div class="notes-box">&#128221; ${order.notes}</div>
-      </div>` : ""}
-
+    <div class="section">
+      <div class="label">Items</div>
+      ${itemsHtml}
     </div>
 
-    <div class="footer">
-      <div class="barcode">${barsHtml}</div>
-      <div class="footer-id">ORDER-${order._id.slice(-10).toUpperCase()}</div>
-      <div class="footer-thanks">Thank you for your order! &#128591;</div>
+    <div class="section totals">
+      <div class="row"><span>Subtotal</span><span>${escapeHtml(money(order.subtotal || 0))}</span></div>
+      ${Number(order.deliveryFee) > 0 ? `<div class="row"><span>Delivery${order.deliveryArea ? ` (${escapeHtml(order.deliveryArea)})` : ""}</span><span>${escapeHtml(money(order.deliveryFee))}</span></div>` : ""}
+      <div class="row grand-total"><span>TOTAL</span><span>${escapeHtml(money(order.total))}</span></div>
     </div>
 
-    <button class="print-btn" onclick="window.print()">&#128438; Print Receipt</button>
+    ${order.notes ? `
+    <div class="section">
+      <div class="label">Notes / allergies</div>
+      <div class="notes">${escapeHtml(order.notes)}</div>
+    </div>` : ""}
 
+    <div class="section center">
+      <div>ORDER-${escapeHtml(order._id.slice(-10).toUpperCase())}</div>
+      <div>Keep this slip with the order</div>
+    </div>
+
+    <button class="print-btn" onclick="window.print()">Print Receipt</button>
   </div>
   <script>
-    if (document.fonts && document.fonts.ready) {
-      document.fonts.ready.then(() => setTimeout(() => window.print(), 500));
-    } else {
-      setTimeout(() => window.print(), 900);
-    }
+    window.addEventListener("load", () => setTimeout(() => window.print(), 250));
   </script>
 </body>
 </html>`;
 
-    const printWindow = window.open("", "_blank", "width=460,height=820");
+    const printWindow = window.open("", "_blank", "width=360,height=760");
     if (!printWindow) {
       alert("Please allow pop-ups to print the receipt.");
       return;
