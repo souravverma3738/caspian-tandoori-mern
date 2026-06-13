@@ -32,6 +32,16 @@ function addressLines(order) {
   ].filter(Boolean);
 }
 
+function itemChoiceLines(item) {
+  const lines = [];
+  if (item.variant?.name) lines.push(item.variant.name);
+  (item.selectedOptions || []).forEach((group) => {
+    const names = (group.options || []).map((option) => option.name).filter(Boolean).join(", ");
+    if (names) lines.push(`${group.groupName}: ${names}`);
+  });
+  return lines;
+}
+
 function formatDateTime(dateString) {
   if (!dateString) return "";
   return new Date(dateString).toLocaleString("en-GB", {
@@ -67,6 +77,7 @@ export function printOrderReceipt(order) {
             <span class="item-name">${escapeHtml(item.name)}</span>
           </div>
           <div class="item-price">${escapeHtml(money(lineTotal))}</div>
+          ${itemChoiceLines(item).map((line) => `<div class="item-meta">${escapeHtml(line)}</div>`).join("")}
           ${item.category ? `<div class="item-meta">${escapeHtml(item.category)}</div>` : ""}
         </div>`;
     })

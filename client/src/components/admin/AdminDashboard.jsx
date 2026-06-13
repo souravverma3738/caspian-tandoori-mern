@@ -8,6 +8,7 @@ import AdminReports from "./AdminReports";
 import AdminSettings from "./AdminSettings";
 import AdminOrderNotifier from "./AdminOrderNotifier";
 import AdminCoupons from "./AdminCoupons";
+import AdminMenu from "./AdminMenu";
 
 function AdminDashboard({ user, go }) {
   const [activeTab, setActiveTab] = useState("dashboard");
@@ -97,6 +98,7 @@ function AdminDashboard({ user, go }) {
   const tabs = [
     ["dashboard", "Dashboard"],
     ["orders", "Orders"],
+    ["menu", "Menu"],
     ["customers", "Customers"],
     ["coupons", "Coupons"],
     ["clock", "Clock In / Out"],
@@ -180,6 +182,7 @@ function AdminDashboard({ user, go }) {
         <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-6">
           {activeTab === "dashboard" && <AdminOverview />}
           {activeTab === "orders" && <AdminOrders />}
+          {activeTab === "menu" && <AdminMenu />}
           {activeTab === "customers" && <AdminCustomers />}
           {activeTab === "coupons" && <AdminCoupons />}
           {activeTab === "clock" && <AdminClockInOut />}

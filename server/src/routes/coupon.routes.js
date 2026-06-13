@@ -4,6 +4,7 @@ import Coupon from "../models/Coupon.js";
 import { auth } from "../middleware/auth.js";
 import { quoteDelivery } from "../utils/shop.js";
 import { calculateDiscount, calculateItemsSubtotal } from "../services/discounts.js";
+import { verifyAndPriceCartItems } from "../services/menuPricing.js";
 
 const router = express.Router();
 
@@ -45,7 +46,8 @@ router.get("/active-offer", async (req, res) => {
 router.post("/validate", auth, async (req, res) => {
   try {
     const { code, items = [], orderType, address } = req.body;
-    const subtotal = calculateItemsSubtotal(items);
+    const verifiedItems = await verifyAndPriceCartItems(items);
+    const subtotal = calculateItemsSubtotal(verifiedItems);
 
     let settings = await RestaurantSettings.findOne();
     if (!settings) settings = await RestaurantSettings.create({});

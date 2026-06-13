@@ -1,10 +1,14 @@
 import mongoose from "mongoose";
 
 const orderItemSchema = new mongoose.Schema({
+  menuItemId: { type: mongoose.Schema.Types.ObjectId, ref: "MenuItem" },
   name: { type: String, required: true },
   price: { type: Number, required: true },
   qty: { type: Number, required: true },
-  category: { type: String, default: "" }
+  category: { type: String, default: "" },
+  variant: { type: Object, default: null },
+  selectedOptions: { type: Array, default: [] },
+  pricingSnapshot: { type: Object, default: {} },
 });
 
 const orderSchema = new mongoose.Schema(

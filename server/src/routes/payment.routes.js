@@ -6,6 +6,7 @@ import { auth } from "../middleware/auth.js";
 import { getShopStatus, quoteDelivery, isScheduledTimeValid } from "../utils/shop.js";
 import { createOrderFromPaidStripeSession } from "../services/stripeOrderConfirmation.js";
 import { calculateDiscount, calculateItemsSubtotal } from "../services/discounts.js";
+import { verifyAndPriceCartItems } from "../services/menuPricing.js";
 
 const router = express.Router();
 
@@ -66,8 +67,14 @@ router.post("/create-checkout-session", auth, async (req, res) => {
       }
     }
 
-    // 2. Server-side compute subtotal.
-    const subtotal = calculateItemsSubtotal(items);
+    // 2. Server-side verify options and compute subtotal.
+    let verifiedItems;
+    try {
+      verifiedItems = await verifyAndPriceCartItems(items);
+    } catch (err) {
+      return res.status(400).json({ message: err.message || "Invalid basket" });
+    }
+    const subtotal = calculateItemsSubtotal(verifiedItems);
 
     if (subtotal < Number(settings.minimumOrder || 0) && orderType === "Delivery") {
       return res.status(400).json({
@@ -107,7 +114,7 @@ router.post("/create-checkout-session", auth, async (req, res) => {
       phone,
       orderType,
       address: orderType === "Delivery" ? address : null,
-      items,
+      items: verifiedItems,
       subtotal,
       deliveryFee,
       deliveryArea,
@@ -154,6 +161,7 @@ router.post("/create-checkout-session", auth, async (req, res) => {
       clientSecret: session.client_secret,
       checkoutId: pendingCheckout._id,
       summary: {
+        items: verifiedItems,
         subtotal,
         deliveryFee,
         deliveryArea,

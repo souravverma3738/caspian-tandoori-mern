@@ -53,8 +53,18 @@ export const orderApi = {
   create: (payload) => apiRequest("/orders", { method: "POST", body: JSON.stringify(payload) }),
   myOrders: () => apiRequest("/orders/my-orders")
 };
+export const menuApi = {
+  list: () => apiRequest("/menu"),
+};
 export const adminApi = {
   dashboard: () => apiRequest("/admin/dashboard"),
+  menu: () => apiRequest("/admin/menu"),
+  createMenuItem: (payload) =>
+    apiRequest("/admin/menu", { method: "POST", body: JSON.stringify(payload) }),
+  updateMenuItem: (itemId, payload) =>
+    apiRequest(`/admin/menu/${itemId}`, { method: "PUT", body: JSON.stringify(payload) }),
+  deleteMenuItem: (itemId) =>
+    apiRequest(`/admin/menu/${itemId}`, { method: "DELETE" }),
   orders: (params = {}) => {
     const query = new URLSearchParams(params).toString();
     return apiRequest(`/admin/orders${query ? `?${query}` : ""}`);

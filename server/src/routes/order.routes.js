@@ -4,6 +4,7 @@ import { auth } from "../middleware/auth.js";
 import RestaurantSettings from "../models/RestaurantSettings.js";
 import { quoteDelivery } from "../utils/shop.js";
 import { calculateDiscount, calculateItemsSubtotal, incrementCouponUse } from "../services/discounts.js";
+import { verifyAndPriceCartItems } from "../services/menuPricing.js";
 
 const router = express.Router();
 
@@ -17,7 +18,14 @@ router.post("/", auth, async (req, res) => {
   let settings = await RestaurantSettings.findOne();
   if (!settings) settings = await RestaurantSettings.create({});
 
-  const subtotal = calculateItemsSubtotal(items);
+  let verifiedItems;
+  try {
+    verifiedItems = await verifyAndPriceCartItems(items);
+  } catch (err) {
+    return res.status(400).json({ message: err.message || "Invalid basket" });
+  }
+
+  const subtotal = calculateItemsSubtotal(verifiedItems);
   let deliveryFee = 0;
   let deliveryArea = "";
   if (orderType === "Delivery") {
@@ -42,7 +50,7 @@ router.post("/", auth, async (req, res) => {
     phone,
     orderType,
     address,
-    items,
+    items: verifiedItems,
     subtotal,
     deliveryFee,
     deliveryArea,

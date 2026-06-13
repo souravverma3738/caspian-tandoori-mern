@@ -10,6 +10,7 @@ import {
   paymentApi,
   couponApi,
   settingsApi,
+  menuApi,
 } from "./api";
 import { orderApi } from "./api";
 import { signInWithPopup } from "firebase/auth";
@@ -64,7 +65,7 @@ const categories = [
     ["Mega Pizza Deal 12\"", 28.5, "12\" pizza with Euro Munchie Box and 2 cans of juice."],
   ] },
   { id: "calzone", name: "Calzone", items: [
-    ["Calzone Donner Meat", 6.5, "Donner meat calzone."],
+    ["Calzone Donner Meat", 7.0, "Donner meat calzone."],
     ["Mixed Calzone", 7.5, "Donner meat and chicken tikka."],
     ["Meat Feast Calzone", 7.5, "Donner meat, pepperoni, ham and chicken tikka."],
     ["Chicken Tikka Calzone", 8.5, "With onion, peppers and mushrooms."],
@@ -367,10 +368,26 @@ const categories = [
 ];
 
 function formatPrice(n) { return `£${Number(n).toFixed(2)}`; }
-function makeFlatItems(menuCategories) { return menuCategories.flatMap((cat) => cat.items.map(([name, price, desc]) => ({ id: `${cat.id}-${name}`, category: cat.name, name, price, desc }))); }
+function makeFlatItems(menuCategories) {
+  return menuCategories.flatMap((cat) => cat.items.map((entry) => {
+    if (Array.isArray(entry)) {
+      const [name, price, desc] = entry;
+      return { id: `${cat.id}-${name}`, category: cat.name, name, price, basePrice: price, desc };
+    }
+    return {
+      ...entry,
+      id: entry._id || entry.id,
+      menuItemId: entry._id || entry.id,
+      category: entry.category || cat.name,
+      price: Number(entry.basePrice ?? entry.price ?? 0),
+      basePrice: Number(entry.basePrice ?? entry.price ?? 0),
+      desc: entry.description || entry.desc || "",
+    };
+  }));
+}
 function filterMenuItems(items, selectedCategory, query) { const q = query.trim().toLowerCase(); return items.filter((item) => (selectedCategory === "all" || item.category === selectedCategory) && (!q || item.name.toLowerCase().includes(q) || item.desc.toLowerCase().includes(q) || item.category.toLowerCase().includes(q))); }
 function calculateCartTotal(cart) { return cart.reduce((sum, item) => sum + item.price * item.qty, 0); }
-function addItemToCart(cart, item) { const exists = cart.find((x) => x.id === item.id); return exists ? cart.map((x) => x.id === item.id ? { ...x, qty: x.qty + 1 } : x) : [...cart, { ...item, qty: 1 }]; }
+function addItemToCart(cart, item) { const key = item.cartKey || item.id; const qty = Math.max(1, Number(item.qty || 1)); const exists = cart.find((x) => (x.cartKey || x.id) === key); return exists ? cart.map((x) => (x.cartKey || x.id) === key ? { ...x, qty: x.qty + qty } : x) : [...cart, { ...item, id: key, cartKey: key, qty }]; }
 function changeItemQuantity(cart, id, amount) { return cart.map((x) => x.id === id ? { ...x, qty: x.qty + amount } : x).filter((x) => x.qty > 0); }
 function runSelfTests() { const sample = makeFlatItems(categories); console.assert(formatPrice(2.2) === "£2.20", "formatPrice should show two decimals"); console.assert(sample.length > 20, "menu should flatten products"); console.assert(filterMenuItems(sample, "Pizzas", "margherita").every((x) => x.category === "Pizzas"), "category filter works"); console.assert(addItemToCart(addItemToCart([], sample[0]), sample[0])[0].qty === 2, "cart increments"); console.assert(changeItemQuantity([{ ...sample[0], qty: 1 }], sample[0].id, -1).length === 0, "cart removes at zero"); console.assert(calculateCartTotal([{ price: 4.5, qty: 2 }]) === 9, "total works"); }
 runSelfTests();
@@ -402,12 +419,20 @@ const [page, setPage] = useState("home");
   const [user, setUser] = useState(() => getStoredUser());
     const [addresses, setAddresses] = useState(() => getStoredUser()?.addresses || []);
     const [authLoading, setAuthLoading] = useState(true);
-    const flatItems = useMemo(() => makeFlatItems(categories), []);
+    const [menuCategories, setMenuCategories] = useState(categories);
+    const [customisingItem, setCustomisingItem] = useState(null);
+    const flatItems = useMemo(() => makeFlatItems(menuCategories), [menuCategories]);
   const filteredItems = useMemo(() => filterMenuItems(flatItems, selectedCategory, query), [flatItems, query, selectedCategory]);
   const total = calculateCartTotal(cart);
   const count = cart.reduce((sum, item) => sum + item.qty, 0);
   const go = (next) => { setPage(next); setMobileOpen(false); window.scrollTo({ top: 0, behavior: "smooth" }); };
  const addToCart = (item) => {
+  const hasChoices = (item.variants || []).some((variant) => variant.isEnabled !== false) ||
+    (item.optionGroups || []).some((group) => group.isEnabled !== false && (group.options || []).some((option) => option.isEnabled !== false));
+  if (hasChoices && !item.selectionsFinalised) {
+    setCustomisingItem(item);
+    return;
+  }
   setCart((prev) => addItemToCart(prev, item));
   setPlaced(false);
 };
@@ -448,6 +473,11 @@ useEffect(() => {
 useEffect(() => {
   settingsApi.get().then(setSettings).catch(console.error);
   couponApi.activeOffer().then((data) => setActiveOffer(data.offer)).catch(console.error);
+  menuApi.list().then((data) => {
+    if (Array.isArray(data.categories) && data.categories.length > 0) {
+      setMenuCategories(data.categories);
+    }
+  }).catch(console.error);
 }, []);
 
 // Detect Stripe return and verify the session (fallback for missing webhook).
@@ -520,7 +550,7 @@ if (authLoading) {
       {mobileOpen && <MobileNav go={go} user={user} setMobileOpen={setMobileOpen} />}
       <main>
       {page === "home" && <HomePage go={go} settings={settings} shopStatus={shopStatus} />}
-        {page === "menu" && <MenuPage query={query} setQuery={setQuery} selectedCategory={selectedCategory} setSelectedCategory={setSelectedCategory} filteredItems={filteredItems} addToCart={addToCart} />}
+        {page === "menu" && <MenuPage query={query} setQuery={setQuery} selectedCategory={selectedCategory} setSelectedCategory={setSelectedCategory} filteredItems={filteredItems} categories={menuCategories} addToCart={addToCart} />}
         {page === "about" && <AboutPage go={go} />}
         {page === "contact" && <ContactPage contactSent={contactSent} setContactSent={setContactSent} settings={settings} />}
         {page === "auth" && <AuthPage authMode={authMode} setAuthMode={setAuthMode} setUser={setUser} setAddresses={setAddresses} go={go} />}
@@ -572,7 +602,20 @@ if (authLoading) {
   shopStatus={shopStatus}
   settings={settings}
 />
-)}    <style>{`
+)}
+  {customisingItem && (
+    <MenuItemOptionsModal
+      item={customisingItem}
+      onClose={() => setCustomisingItem(null)}
+      onAdd={(configuredItem) => {
+        setCart((prev) => addItemToCart(prev, configuredItem));
+        setPlaced(false);
+        setCustomisingItem(null);
+        setCartOpen(true);
+      }}
+    />
+  )}
+    <style>{`
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=Playfair+Display:wght@600;700;800;900&display=swap');
 
 body { font-family: 'Inter', sans-serif; }
@@ -594,6 +637,7 @@ function CheckoutPage({ clientSecret, go, cart = [], total = 0, summary = null, 
     : summary?.discountLabel
       ? `Offer ${summary.discountLabel}`
       : "Discount";
+  const displayItems = Array.isArray(summary?.items) && summary.items.length > 0 ? summary.items : cart;
 
   if (!clientSecret) {
     return (
@@ -627,7 +671,7 @@ function CheckoutPage({ clientSecret, go, cart = [], total = 0, summary = null, 
           </h2>
 
           <div className="mt-5 space-y-3">
-            {cart.map((item) => (
+            {displayItems.map((item) => (
               <div
                 key={item.id}
                 className="rounded-2xl border border-white/10 bg-black/30 p-4"
@@ -635,6 +679,7 @@ function CheckoutPage({ clientSecret, go, cart = [], total = 0, summary = null, 
                 <div className="flex justify-between gap-4">
                   <div>
                     <h3 className="font-black text-white">{item.name}</h3>
+                    <ItemChoiceLines item={item} />
                     <p className="mt-1 text-sm text-white/50">
                       {item.qty} × £{Number(item.price).toFixed(2)}
                     </p>
@@ -1141,7 +1186,256 @@ function HomeSpecialOffer({ go }) {
 function HomeTestimonials() {
   return <section className="border-t border-white/10 bg-white/[0.03]"><div className="mx-auto max-w-7xl px-5 py-24 lg:px-8"><div className="text-center"><p className="mb-3 text-sm font-black uppercase tracking-[0.35em] text-[#ff5b00]">Customer reviews</p><h2 className="font-serif text-5xl font-black">Loved by locals</h2></div><div className="mt-12 grid gap-6 md:grid-cols-3">{[["Amazing food", "The curry was rich, fresh and full of flavour. Ordering was simple too."], ["Best pizza night", "Great choice for the family. The site feels easy and premium."], ["Fast collection", "Basket and checkout are smooth. Exactly what a takeaway website needs."]].map(([title, text]) => <div key={title} className="rounded-[2rem] border border-white/10 bg-[#101010] p-7"><div className="mb-5 flex gap-1 text-[#ff5b00]">★★★★★</div><h3 className="font-serif text-2xl font-black">{title}</h3><p className="mt-4 leading-7 text-white/60">“{text}”</p></div>)}</div></div></section>;
 }
-function MenuPage({ query, setQuery, selectedCategory, setSelectedCategory, filteredItems, addToCart }) {
+function optionGroupsFor(item) {
+  return (item.optionGroups || [])
+    .filter((group) => group.isEnabled !== false && (group.options || []).some((option) => option.isEnabled !== false))
+    .map((group) => ({
+      ...group,
+      options: (group.options || [])
+        .filter((option) => option.isEnabled !== false)
+        .sort((a, b) => (a.displayOrder || 0) - (b.displayOrder || 0)),
+    }))
+    .sort((a, b) => (a.displayOrder || 0) - (b.displayOrder || 0));
+}
+
+function variantsFor(item) {
+  return (item.variants || [])
+    .filter((variant) => variant.isEnabled !== false)
+    .sort((a, b) => (a.displayOrder || 0) - (b.displayOrder || 0));
+}
+
+function selectedOptionGroups(item, selectedOptionsByGroup) {
+  return optionGroupsFor(item)
+    .map((group) => {
+      const ids = selectedOptionsByGroup[group._id] || [];
+      const options = group.options
+        .filter((option) => ids.includes(String(option._id)))
+        .map((option) => ({
+          optionId: String(option._id),
+          name: option.name,
+          priceDelta: Number(option.priceDelta || 0),
+        }));
+      return {
+        groupId: String(group._id),
+        groupName: group.name,
+        selectionType: group.selectionType,
+        options,
+      };
+    })
+    .filter((group) => group.options.length > 0);
+}
+
+function optionsTotal(selectedGroups) {
+  return selectedGroups.reduce(
+    (sum, group) => sum + group.options.reduce((optionSum, option) => optionSum + Number(option.priceDelta || 0), 0),
+    0
+  );
+}
+
+function choiceSummary(item) {
+  const parts = [];
+  if (item.variant?.name) parts.push(item.variant.name);
+  (item.selectedOptions || []).forEach((group) => {
+    const names = (group.options || []).map((option) => option.name).join(", ");
+    if (names) parts.push(`${group.groupName}: ${names}`);
+  });
+  return parts;
+}
+
+function ItemChoiceLines({ item, className = "mt-1 text-xs text-white/45" }) {
+  const lines = choiceSummary(item);
+  if (lines.length === 0) return null;
+  return (
+    <div className={className}>
+      {lines.map((line) => (
+        <p key={line}>{line}</p>
+      ))}
+    </div>
+  );
+}
+
+function MenuItemOptionsModal({ item, onClose, onAdd }) {
+  const variants = variantsFor(item);
+  const groups = optionGroupsFor(item);
+  const steps = [
+    ...(variants.length > 0 ? [{ type: "variant", id: "variant", name: "Size", isRequired: true, options: variants }] : []),
+    ...groups.map((group) => ({ type: "group", ...group })),
+  ];
+  const [stepIndex, setStepIndex] = useState(0);
+  const [selectedVariantId, setSelectedVariantId] = useState("");
+  const [selectedOptionsByGroup, setSelectedOptionsByGroup] = useState({});
+  const [qty, setQty] = useState(1);
+
+  const selectedVariant = variants.find((variant) => String(variant._id) === selectedVariantId);
+  const selectedGroups = selectedOptionGroups(item, selectedOptionsByGroup);
+  const unitPrice = Number((selectedVariant ? selectedVariant.price : item.basePrice ?? item.price) || 0) + optionsTotal(selectedGroups);
+  const currentStep = steps[stepIndex];
+  const currentSelection = currentStep?.type === "variant"
+    ? (selectedVariantId ? [selectedVariantId] : [])
+    : (selectedOptionsByGroup[currentStep?._id] || []);
+  const currentRequired = currentStep?.isRequired !== false;
+  const canContinue = !currentStep || !currentRequired || currentSelection.length > 0;
+  const atLastStep = stepIndex >= steps.length - 1;
+
+  function next() {
+    if (!canContinue) return;
+    if (!atLastStep) setStepIndex((value) => value + 1);
+  }
+
+  function selectGroupOption(group, optionId) {
+    setSelectedOptionsByGroup((prev) => {
+      const key = group._id;
+      const current = prev[key] || [];
+      if (group.selectionType === "multiple") {
+        const exists = current.includes(optionId);
+        return { ...prev, [key]: exists ? current.filter((id) => id !== optionId) : [...current, optionId] };
+      }
+      return { ...prev, [key]: [optionId] };
+    });
+    if (group.selectionType !== "multiple" && group.isRequired !== false && stepIndex < steps.length - 1) {
+      setTimeout(() => setStepIndex((value) => Math.min(value + 1, steps.length - 1)), 120);
+    }
+  }
+
+  function addConfiguredItem() {
+    if (!steps.every((step) => {
+      if (step.isRequired === false) return true;
+      if (step.type === "variant") return Boolean(selectedVariantId);
+      return (selectedOptionsByGroup[step._id] || []).length > 0;
+    })) return;
+
+    const selectedOptionIds = selectedGroups.flatMap((group) => group.options.map((option) => option.optionId));
+    const cartKey = [
+      item.menuItemId || item._id || item.id,
+      selectedVariant?._id || "base",
+      ...selectedOptionIds.sort(),
+    ].join("|");
+
+    onAdd({
+      ...item,
+      id: cartKey,
+      cartKey,
+      menuItemId: item.menuItemId || item._id || item.id,
+      price: Math.round(unitPrice * 100) / 100,
+      qty,
+      variantId: selectedVariant?._id || null,
+      variant: selectedVariant ? { variantId: String(selectedVariant._id), name: selectedVariant.name, price: Number(selectedVariant.price || 0) } : null,
+      selectedOptions: selectedGroups,
+      selectedOptionIds,
+      selectionsFinalised: true,
+    });
+  }
+
+  return (
+    <div className="fixed inset-0 z-[80] grid place-items-center bg-black/75 px-4" onClick={onClose}>
+      <div className="max-h-[92vh] w-full max-w-xl overflow-hidden rounded-2xl border border-white/10 bg-[#101010] shadow-2xl" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-start justify-between gap-4 border-b border-white/10 p-5">
+          <div>
+            <h2 className="font-serif text-3xl font-black">{item.name}</h2>
+            {item.desc && <p className="mt-2 text-sm leading-6 text-white/60">{item.desc}</p>}
+          </div>
+          <button onClick={onClose} className="rounded-full border border-white/10 p-2 text-white/70 hover:text-white">
+            <Icon name="x" />
+          </button>
+        </div>
+
+        <div className="max-h-[58vh] overflow-y-auto p-5">
+          {currentStep ? (
+            <>
+              <div className="mb-4 flex items-center justify-between gap-3">
+                <div>
+                  <p className="text-xs font-black uppercase tracking-[0.25em] text-[#ff5b00]">
+                    Question {stepIndex + 1} of {steps.length}
+                  </p>
+                  <h3 className="mt-1 text-2xl font-black">{currentStep.name}</h3>
+                </div>
+                <span className="rounded-full bg-white/10 px-3 py-1 text-xs font-black text-white/70">
+                  {currentStep.isRequired === false ? "Optional" : "Required"}
+                </span>
+              </div>
+
+              <div className="grid gap-3">
+                {currentStep.options.map((option) => {
+                  const optionId = String(option._id);
+                  const selected = currentStep.type === "variant"
+                    ? selectedVariantId === optionId
+                    : currentSelection.includes(optionId);
+                  const optionPrice = currentStep.type === "variant" ? Number(option.price || 0) : Number(option.priceDelta || 0);
+                  return (
+                    <button
+                      key={optionId}
+                      type="button"
+                      onClick={() => {
+                        if (currentStep.type === "variant") {
+                          setSelectedVariantId(optionId);
+                          if (stepIndex < steps.length - 1) setTimeout(() => setStepIndex((value) => Math.min(value + 1, steps.length - 1)), 120);
+                        } else {
+                          selectGroupOption(currentStep, optionId);
+                        }
+                      }}
+                      className={`flex items-center justify-between gap-4 rounded-xl border p-4 text-left transition ${
+                        selected ? "border-[#ff5b00] bg-[#ff5b00]/15" : "border-white/10 bg-black/30 hover:border-white/30"
+                      }`}
+                    >
+                      <span className="flex items-center gap-3">
+                        <span className={`grid h-6 w-6 place-items-center border ${currentStep.selectionType === "multiple" ? "rounded-md" : "rounded-full"} ${selected ? "border-[#ff5b00] bg-[#ff5b00]" : "border-white/30"}`}>
+                          {selected && <span className="h-2 w-2 rounded-full bg-white" />}
+                        </span>
+                        <span className="font-black">{option.name}</span>
+                      </span>
+                      <span className="font-black text-white/75">
+                        {currentStep.type === "variant" ? formatPrice(optionPrice) : optionPrice > 0 ? `+${formatPrice(optionPrice)}` : "Free"}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            </>
+          ) : (
+            <p className="text-white/60">No options available.</p>
+          )}
+        </div>
+
+        <div className="border-t border-white/10 bg-black/30 p-5">
+          <div className="mb-4 flex items-center justify-between gap-4">
+            <div className="flex items-center gap-2">
+              <button onClick={() => setQty((value) => Math.max(1, value - 1))} className="rounded-full bg-white/10 p-3">
+                <Icon name="minus" size={16} />
+              </button>
+              <span className="w-8 text-center text-xl font-black">{qty}</span>
+              <button onClick={() => setQty((value) => value + 1)} className="rounded-full bg-white/10 p-3">
+                <Icon name="plus" size={16} />
+              </button>
+            </div>
+            <p className="text-right">
+              <span className="block text-xs font-bold uppercase tracking-widest text-white/40">Total</span>
+              <span className="text-2xl font-black text-[#ff5b00]">{formatPrice(unitPrice * qty)}</span>
+            </p>
+          </div>
+
+          <div className="grid gap-3 sm:grid-cols-2">
+            {stepIndex > 0 && (
+              <button type="button" onClick={() => setStepIndex((value) => Math.max(0, value - 1))} className="rounded-full border border-white/10 px-5 py-3 font-black text-white hover:border-[#ff5b00]">
+                Back
+              </button>
+            )}
+            {!atLastStep ? (
+              <button type="button" disabled={!canContinue} onClick={next} className="rounded-full bg-[#ff5b00] px-5 py-3 font-black text-white disabled:cursor-not-allowed disabled:bg-white/10 disabled:text-white/40 sm:col-start-2">
+                Continue
+              </button>
+            ) : (
+              <button type="button" disabled={!canContinue} onClick={addConfiguredItem} className="rounded-full bg-[#ff5b00] px-5 py-3 font-black text-white disabled:cursor-not-allowed disabled:bg-white/10 disabled:text-white/40 sm:col-start-2">
+                Add {formatPrice(unitPrice * qty)}
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function MenuPage({ query, setQuery, selectedCategory, setSelectedCategory, filteredItems, categories, addToCart }) {
   return (
     <section className="mx-auto max-w-7xl px-5 pb-24 pt-40 lg:px-8">
       <div className="mb-12">
@@ -1247,7 +1541,7 @@ function MenuPage({ query, setQuery, selectedCategory, setSelectedCategory, filt
                       <h3 className="mt-1 text-xl font-black">{item.name}</h3>
                     </div>
                     <span className="rounded-full bg-[#ff5b00]/15 px-3 py-1 font-black text-[#ff8b3d]">
-                      {formatPrice(item.price)}
+                      {variantsFor(item).length > 0 ? `from ${formatPrice(item.price)}` : formatPrice(item.price)}
                     </span>
                   </div>
 
@@ -1484,6 +1778,7 @@ useEffect(() => {
                   <div key={index} className="flex justify-between gap-4">
                     <span>
                       {item.qty} × {item.name}
+                      <ItemChoiceLines item={item} />
                     </span>
                     <span>
                       £{Number(item.price * item.qty).toFixed(2)}
@@ -1859,7 +2154,7 @@ function AdminOrderCard({ order, updateStatus, printOrder }) {
         <div className="grid gap-2">
           {order.items.map((item, index) => (
             <div key={index} className="flex justify-between text-white/70">
-              <span>{item.qty} × {item.name}</span>
+              <span>{item.qty} × {item.name}<ItemChoiceLines item={item} /></span>
               <span>£{Number(item.price * item.qty).toFixed(2)}</span>
             </div>
           ))}
@@ -2048,6 +2343,9 @@ function CartDrawer({
         orderType,
         address: orderType === "Delivery" ? customer.address : null,
         items: cart.map((item) => ({
+          menuItemId: item.menuItemId || item._id || item.id,
+          variantId: item.variantId || item.variant?.variantId || null,
+          selectedOptions: item.selectedOptions || [],
           name: item.name,
           price: item.price,
           qty: item.qty,
@@ -2083,6 +2381,9 @@ function CartDrawer({
         orderType,
         address: orderType === "Delivery" ? customer.address : null,
         items: cart.map((item) => ({
+          menuItemId: item.menuItemId || item._id || item.id,
+          variantId: item.variantId || item.variant?.variantId || null,
+          selectedOptions: item.selectedOptions || [],
           name: item.name,
           price: item.price,
           qty: item.qty,
@@ -2105,6 +2406,9 @@ function CartDrawer({
         orderType,
         address: orderType === "Delivery" ? customer.address : null,
         items: cart.map((item) => ({
+          menuItemId: item.menuItemId || item._id || item.id,
+          variantId: item.variantId || item.variant?.variantId || null,
+          selectedOptions: item.selectedOptions || [],
           name: item.name,
           price: item.price,
           qty: item.qty,
@@ -2167,6 +2471,7 @@ function CartDrawer({
                   <div className="flex justify-between gap-3">
                     <div>
                       <h3 className="font-bold">{item.name}</h3>
+                      <ItemChoiceLines item={item} />
                       <p className="text-sm text-white/50">{formatPrice(item.price)} each</p>
                     </div>
                     <button onClick={() => setCart((prev) => prev.filter((x) => x.id !== item.id))}>

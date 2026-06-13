@@ -23,6 +23,16 @@ function paymentMethodLabel(order) {
   return method;
 }
 
+function itemChoiceLines(item) {
+  const lines = [];
+  if (item.variant?.name) lines.push(item.variant.name);
+  (item.selectedOptions || []).forEach((group) => {
+    const names = (group.options || []).map((option) => option.name).filter(Boolean).join(", ");
+    if (names) lines.push(`${group.groupName}: ${names}`);
+  });
+  return lines;
+}
+
 function isPaidPendingOrder(order) {
   return order?.status === "Pending" && order?.paymentStatus === "Paid";
 }
@@ -303,6 +313,9 @@ export default function AdminOrderNotifier({ onViewDetails }) {
                     <p className="font-black">
                       {item.qty} x {item.name}
                     </p>
+                    {itemChoiceLines(item).map((line) => (
+                      <p key={line} className="text-sm font-bold text-black/60">{line}</p>
+                    ))}
                     {item.category && (
                       <p className="text-sm font-bold text-black/45">{item.category}</p>
                     )}

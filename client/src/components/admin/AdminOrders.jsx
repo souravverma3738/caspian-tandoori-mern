@@ -14,6 +14,16 @@ const statuses = [
   "Cancelled",
 ];
 
+function itemChoiceLines(item) {
+  const lines = [];
+  if (item.variant?.name) lines.push(item.variant.name);
+  (item.selectedOptions || []).forEach((group) => {
+    const names = (group.options || []).map((option) => option.name).filter(Boolean).join(", ");
+    if (names) lines.push(`${group.groupName}: ${names}`);
+  });
+  return lines;
+}
+
 function money(value) {
   return `£${Number(value || 0).toFixed(2)}`;
 }
@@ -746,6 +756,9 @@ export default function AdminOrders() {
                     >
                       <span>
                         {item.qty} x {item.name}
+                        {itemChoiceLines(item).map((line) => (
+                          <span key={line} className="block text-xs text-white/40">{line}</span>
+                        ))}
                       </span>
                       <span>{money(item.price * item.qty)}</span>
                     </div>

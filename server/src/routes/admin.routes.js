@@ -8,11 +8,105 @@ import TemperatureLog from "../models/TemperatureLog.js";
 import RestaurantSettings from "../models/RestaurantSettings.js";
 import Coupon from "../models/Coupon.js";
 import { couponStatus } from "../services/discounts.js";
+import MenuItem from "../models/MenuItem.js";
+import { ensureDefaultMenu } from "../services/menuPricing.js";
 
 const router = express.Router();
 
 router.use(auth);
 router.use(adminOnly);
+
+router.get("/menu", async (req, res) => {
+  await ensureDefaultMenu();
+  const items = await MenuItem.find().sort({ displayOrder: 1, category: 1, name: 1 });
+  res.json(items);
+});
+
+router.post("/menu", async (req, res) => {
+  try {
+    const payload = normaliseMenuItemPayload(req.body);
+    const sourceKey = payload.sourceKey || `${Date.now()}-${payload.name.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`;
+    const item = await MenuItem.create({ ...payload, sourceKey });
+    res.status(201).json(item);
+  } catch (err) {
+    res.status(400).json({ message: err.message || "Could not create menu item" });
+  }
+});
+
+router.put("/menu/:id", async (req, res) => {
+  try {
+    const item = await MenuItem.findByIdAndUpdate(
+      req.params.id,
+      normaliseMenuItemPayload(req.body),
+      { new: true, runValidators: true }
+    );
+    if (!item) return res.status(404).json({ message: "Menu item not found" });
+    res.json(item);
+  } catch (err) {
+    res.status(400).json({ message: err.message || "Could not update menu item" });
+  }
+});
+
+router.delete("/menu/:id", async (req, res) => {
+  const item = await MenuItem.findByIdAndDelete(req.params.id);
+  if (!item) return res.status(404).json({ message: "Menu item not found" });
+  res.json({ ok: true });
+});
+
+function numberOrZero(value, fieldName = "Price") {
+  const n = Number(String(value ?? "").replace(/,/g, ""));
+  if (!Number.isFinite(n)) return 0;
+  if (n > 500) {
+    throw new Error(`${fieldName} looks too high. Please enter the amount in pounds, for example 7.00.`);
+  }
+  return Math.max(0, Math.round(n * 100) / 100);
+}
+
+function normaliseMenuItemPayload(body) {
+  const name = String(body.name || "").trim();
+  const category = String(body.category || "").trim();
+  if (!name) throw new Error("Item name is required");
+  if (!category) throw new Error("Category is required");
+
+  return {
+    sourceKey: body.sourceKey,
+    name,
+    category,
+    description: String(body.description || "").trim(),
+    basePrice: numberOrZero(body.basePrice, "Base price"),
+    displayOrder: Number(body.displayOrder || 0),
+    isEnabled: body.isEnabled !== false,
+    variants: Array.isArray(body.variants)
+      ? body.variants.map((variant, index) => ({
+          _id: variant._id,
+          name: String(variant.name || "").trim(),
+          price: numberOrZero(variant.price, `Size price for ${variant.name || "variant"}`),
+          displayOrder: Number(variant.displayOrder ?? index),
+          isEnabled: variant.isEnabled !== false,
+        })).filter((variant) => variant.name)
+      : [],
+    optionGroups: Array.isArray(body.optionGroups)
+      ? body.optionGroups.map((group, groupIndex) => ({
+          _id: group._id,
+          name: String(group.name || "").trim(),
+          isRequired: Boolean(group.isRequired),
+          selectionType: group.selectionType === "multiple" ? "multiple" : "single",
+          displayOrder: Number(group.displayOrder ?? groupIndex),
+          showAfterPreviousAnswered: group.showAfterPreviousAnswered !== false,
+          isEnabled: group.isEnabled !== false,
+          options: Array.isArray(group.options)
+            ? group.options.map((option, optionIndex) => ({
+                _id: option._id,
+                name: String(option.name || "").trim(),
+                priceDelta: numberOrZero(option.priceDelta, `Extra price for ${option.name || "option"}`),
+                displayOrder: Number(option.displayOrder ?? optionIndex),
+                isEnabled: option.isEnabled !== false,
+              })).filter((option) => option.name)
+            : [],
+        })).filter((group) => group.name)
+      : [],
+  };
+}
 
 router.get("/dashboard", async (req, res) => {
   const startOfDay = new Date();

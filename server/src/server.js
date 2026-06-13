@@ -12,6 +12,7 @@ import { fileURLToPath } from "url";
 import paymentRoutes from "./routes/payment.routes.js";
 import stripeWebhookRoutes from "./routes/stripeWebhook.routes.js";
 import couponRoutes from "./routes/coupon.routes.js";
+import menuRoutes from "./routes/menu.routes.js";
 import RestaurantSettings from "./models/RestaurantSettings.js";
 import { getShopStatus, quoteDelivery } from "./utils/shop.js";
 
@@ -146,6 +147,7 @@ app.post("/api/settings/delivery-quote", async (req, res) => {
 app.use("/api/admin", adminRoutes);
 app.use("/api/auth", authRoutes);
 app.use("/api/users", userRoutes);
+app.use("/api/menu", menuRoutes);
 app.use("/api/orders", orderRoutes);
 app.use("/api/payments", paymentRoutes);
 app.use("/api/coupons", couponRoutes);
