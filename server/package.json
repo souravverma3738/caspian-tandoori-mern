@@ -11,6 +11,7 @@
     "cors": "latest",
     "dotenv": "latest",
     "express": "latest",
+    "firebase-admin": "^14.0.0",
     "jsonwebtoken": "latest",
     "mongoose": "latest",
     "stripe": "^22.1.0"

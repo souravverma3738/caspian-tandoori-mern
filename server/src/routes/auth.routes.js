@@ -1,6 +1,8 @@
 import express from "express";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
+import { cert, getApps, initializeApp } from "firebase-admin/app";
+import { getAuth } from "firebase-admin/auth";
 import User from "../models/User.js";
 
 const router = express.Router();
@@ -25,6 +27,29 @@ function publicUser(user) {
     addresses: user.addresses,
     loyaltyPoints: user.loyaltyPoints,
   };
+}
+
+function initFirebaseAdmin() {
+  if (getApps().length) return;
+
+  const serviceAccountJson = process.env.FIREBASE_SERVICE_ACCOUNT_JSON;
+  const projectId = process.env.FIREBASE_PROJECT_ID || "caspian-tandoori";
+
+  if (serviceAccountJson) {
+    initializeApp({
+      credential: cert(JSON.parse(serviceAccountJson)),
+      projectId,
+    });
+    return;
+  }
+
+  initializeApp({ projectId });
+}
+
+async function verifyFirebaseIdToken(idToken) {
+  if (!idToken) throw new Error("Missing Firebase ID token");
+  initFirebaseAdmin();
+  return getAuth().verifyIdToken(idToken);
 }
 
 router.post("/signup", async (req, res) => {
@@ -103,9 +128,30 @@ router.post("/signin", async (req, res) => {
 });
 
 router.post("/google", async (req, res) => {
-  res.status(501).json({
-    message: "Google sign-in is temporarily unavailable while identity verification is configured.",
-  });
+  try {
+    const { idToken } = req.body || {};
+    const firebaseUser = await verifyFirebaseIdToken(idToken);
+    const cleanEmail = String(firebaseUser.email || "").trim().toLowerCase();
+
+    if (!cleanEmail || !firebaseUser.email_verified) {
+      return res.status(400).json({ message: "Verified Google email is required" });
+    }
+
+    let user = await User.findOne({ email: cleanEmail });
+    if (!user) {
+      user = await User.create({
+        name: firebaseUser.name || cleanEmail.split("@")[0] || "Google Customer",
+        email: cleanEmail,
+        provider: "google",
+      });
+    }
+
+    const token = createToken(user._id);
+    res.json({ token, user: publicUser(user) });
+  } catch (error) {
+    console.error("[google signin] failed:", error);
+    res.status(401).json({ message: "Google sign-in could not be verified" });
+  }
 });
 
 export default router;
