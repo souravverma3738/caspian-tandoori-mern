@@ -5,13 +5,13 @@ import User from "../models/User.js";
 
 const router = express.Router();
 
-function createToken(userId) {
+function createToken(userId, extraClaims = {}) {
   if (!process.env.JWT_SECRET) {
     throw new Error(
       "JWT_SECRET is not set on the server. Add it to your environment variables and restart."
     );
   }
-  return jwt.sign({ id: userId }, process.env.JWT_SECRET, { expiresIn: "7d" });
+  return jwt.sign({ id: userId, ...extraClaims }, process.env.JWT_SECRET, { expiresIn: "7d" });
 }
 
 function publicUser(user) {
@@ -76,7 +76,7 @@ router.post("/signin", async (req, res) => {
       password === process.env.ADMIN_PASSWORD
     ) {
       return res.json({
-        token: "admin-token",
+        token: createToken("admin-env", { role: "admin" }),
         user: { name: "Admin", email: cleanEmail, role: "admin" },
       });
     }
@@ -102,30 +102,10 @@ router.post("/signin", async (req, res) => {
   }
 });
 
-// Demo Google login. Replace with verified Google ID token in production.
 router.post("/google", async (req, res) => {
-  try {
-    const { name, email } = req.body || {};
-    if (!email) return res.status(400).json({ message: "Google email is required" });
-
-    const cleanEmail = String(email).trim().toLowerCase();
-    let user = await User.findOne({ email: cleanEmail });
-    if (!user) {
-      user = await User.create({
-        name: name || "Google Customer",
-        email: cleanEmail,
-        provider: "google",
-      });
-    }
-
-    const token = createToken(user._id);
-    res.json({ token, user: publicUser(user) });
-  } catch (error) {
-    console.error("[google signin] failed:", error);
-    res
-      .status(500)
-      .json({ message: error.message || "Google signin failed" });
-  }
+  res.status(501).json({
+    message: "Google sign-in is temporarily unavailable while identity verification is configured.",
+  });
 });
 
 export default router;

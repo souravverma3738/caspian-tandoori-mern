@@ -1,25 +1,29 @@
 import { useState } from "react";
+import { authApi, setSession } from "../../api";
 
 export default function AdminLogin({ go, setUser }) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
 
-  const handleLogin = (e) => {
+  const handleLogin = async (e) => {
     e.preventDefault();
+    setError("");
+    setLoading(true);
 
-    if (
-      email === import.meta.env.VITE_ADMIN_EMAIL &&
-      password === import.meta.env.VITE_ADMIN_PASSWORD
-    ) {
-      const adminUser = { name: "Admin", email, role: "admin" };
-      localStorage.setItem("token", "admin-token");
-      localStorage.setItem("caspian_token", "admin-token");
-      localStorage.setItem("caspian_user", JSON.stringify(adminUser));
-      setUser(adminUser);
+    try {
+      const data = await authApi.signin({ email, password });
+      if (data.user?.role !== "admin") {
+        throw new Error("Admin access only");
+      }
+      setSession(data.token, data.user);
+      setUser(data.user);
       go("admin");
-    } else {
-      setError("Invalid admin credentials");
+    } catch (err) {
+      setError(err.message || "Invalid admin credentials");
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -46,8 +50,8 @@ export default function AdminLogin({ go, setUser }) {
           className="w-full p-3 mb-4 rounded bg-zinc-800 text-white"
         />
 
-        <button type="submit" className="w-full bg-red-600 hover:bg-red-700 p-3 rounded text-white font-bold">
-          Login
+        <button type="submit" disabled={loading} className="w-full bg-red-600 hover:bg-red-700 disabled:opacity-60 p-3 rounded text-white font-bold">
+          {loading ? "Checking..." : "Login"}
         </button>
       </form>
     </div>

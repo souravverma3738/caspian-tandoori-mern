@@ -11,8 +11,9 @@ export async function auth(req, res, next) {
 
     const token = header.split(" ")[1];
 
-    // hardcoded admin token support
-    if (token === "admin-token") {
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+
+    if (decoded.id === "admin-env" && decoded.role === "admin") {
       req.user = {
         _id: "admin",
         name: "Admin",
@@ -22,8 +23,6 @@ export async function auth(req, res, next) {
       return next();
     }
 
-    // normal user JWT support
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
     const user = await User.findById(decoded.id).select("-password");
 
     if (!user) {
