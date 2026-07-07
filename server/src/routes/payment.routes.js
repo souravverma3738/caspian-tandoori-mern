@@ -1,11 +1,12 @@
 import express from "express";
 import Stripe from "stripe";
 import PendingCheckout from "../models/PendingCheckout.js";
+import Order from "../models/Order.js";
 import RestaurantSettings from "../models/RestaurantSettings.js";
 import { auth } from "../middleware/auth.js";
 import { getShopStatus, quoteDelivery, isScheduledTimeValid } from "../utils/shop.js";
 import { createOrderFromPaidStripeSession } from "../services/stripeOrderConfirmation.js";
-import { calculateDiscount, calculateItemsSubtotal } from "../services/discounts.js";
+import { calculateDiscount, calculateItemsSubtotal, incrementCouponUse } from "../services/discounts.js";
 import { verifyAndPriceCartItems } from "../services/menuPricing.js";
 
 const router = express.Router();
@@ -38,7 +39,6 @@ router.post("/create-checkout-session", auth, async (req, res) => {
     let settings = await RestaurantSettings.findOne();
     if (!settings) settings = await RestaurantSettings.create({});
 
-    // 1. Validate shop open or valid scheduled time.
     const shopStatus = getShopStatus(settings);
     let normalizedScheduledFor = null;
 
@@ -67,7 +67,6 @@ router.post("/create-checkout-session", auth, async (req, res) => {
       }
     }
 
-    // 2. Server-side verify options and compute subtotal.
     let verifiedItems;
     try {
       verifiedItems = await verifyAndPriceCartItems(items);
@@ -82,7 +81,6 @@ router.post("/create-checkout-session", auth, async (req, res) => {
       });
     }
 
-    // 3. Server-side compute delivery fee.
     let deliveryFee = 0;
     let deliveryArea = "";
     if (orderType === "Delivery") {
@@ -104,11 +102,8 @@ router.post("/create-checkout-session", auth, async (req, res) => {
       0,
       Math.round((totalBeforeDiscount - discount.discountAmount) * 100) / 100
     );
-    if (finalTotal <= 0) {
-      return res.status(400).json({ message: "Order total must be greater than £0 for online payment." });
-    }
 
-    const pendingCheckout = await PendingCheckout.create({
+    const order = await Order.create({
       user: req.user._id,
       customerName,
       phone,
@@ -128,38 +123,18 @@ router.post("/create-checkout-session", auth, async (req, res) => {
       total: finalTotal,
       notes,
       scheduledFor: normalizedScheduledFor,
+      paymentStatus: "Pending",
+      paymentProvider: "pay_later",
+      paymentMethod: "pay_later",
+      status: "Pending",
     });
-
-    const lineItems = [
-      {
-        price_data: {
-          currency: "gbp",
-          product_data: { name: "Caspian Tandoori order" },
-          unit_amount: Math.round(finalTotal * 100),
-        },
-        quantity: 1,
-      },
-    ];
-
-    const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
-    const session = await stripe.checkout.sessions.create({
-      ui_mode: "embedded_page",
-      mode: "payment",
-      payment_method_types: ["card"],
-      line_items: lineItems,
-      metadata: {
-        checkoutId: String(pendingCheckout._id),
-        userId: String(req.user._id),
-      },
-      return_url: `${process.env.CLIENT_URL}/?checkout=return&session_id={CHECKOUT_SESSION_ID}`,
-    });
-
-    pendingCheckout.stripeSessionId = session.id;
-    await pendingCheckout.save();
+    await incrementCouponUse(discount.coupon?._id);
 
     res.json({
-      clientSecret: session.client_secret,
-      checkoutId: pendingCheckout._id,
+      clientSecret: "pay_later",
+      checkoutId: order._id,
+      payLater: true,
+      orderId: order._id,
       summary: {
         items: verifiedItems,
         subtotal,
@@ -172,20 +147,28 @@ router.post("/create-checkout-session", auth, async (req, res) => {
         discountValue: discount.discountValue,
         discountAmount: discount.discountAmount,
         finalTotal,
+        orderId: order._id,
+        paymentMethod: "Pay later",
       },
     });
   } catch (err) {
-    res.status(500).json({ message: err.message || "Could not create payment" });
+    res.status(500).json({ message: err.message || "Could not create order" });
   }
 });
 
-// Verify a Stripe Checkout session and update the order accordingly.
-// Used as a fallback when the Stripe webhook is not configured, or to confirm
-// payment immediately after the customer returns from Stripe.
 router.get("/verify-session/:sessionId", auth, async (req, res) => {
   try {
     const { sessionId } = req.params;
     if (!sessionId) return res.status(400).json({ message: "Missing session id" });
+
+    if (sessionId === "pay_later") {
+      return res.json({
+        paymentStatus: "Pending",
+        checkoutStatus: "pay_later",
+        status: "Pending",
+        orderId: null,
+      });
+    }
 
     const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
     const session = await stripe.checkout.sessions.retrieve(sessionId);
