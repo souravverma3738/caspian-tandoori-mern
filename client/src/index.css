@@ -3,14 +3,13 @@
 @tailwind utilities;
 
 @layer components {
-  /* Temporary checkout display while online card payments are paused. */
   .bg-white.p-4.shadow-2xl {
     position: relative;
-    min-height: 430px;
+    min-height: 300px;
     overflow: hidden;
     border-color: rgba(255, 91, 0, 0.22) !important;
     background:
-      radial-gradient(circle at 70% 15%, rgba(255, 91, 0, 0.24), transparent 34%),
+      radial-gradient(circle at 75% 10%, rgba(255, 91, 0, 0.18), transparent 32%),
       linear-gradient(145deg, #151515 0%, #080808 100%) !important;
     color: #fff;
   }
@@ -20,32 +19,32 @@
   }
 
   .bg-white.p-4.shadow-2xl::before {
-    content: "Order placed successfully";
+    content: "Order received";
     position: absolute;
-    left: 32px;
-    right: 32px;
-    top: 64px;
+    left: 24px;
+    right: 24px;
+    top: 38px;
     color: #fff;
     font-family: 'Playfair Display', serif;
-    font-size: clamp(2rem, 4vw, 3.6rem);
+    font-size: clamp(2rem, 4vw, 3.2rem);
     font-weight: 900;
     line-height: 1.05;
   }
 
   .bg-white.p-4.shadow-2xl::after {
-    content: "Pay later is currently available while online card payments are being updated. Your order has been sent to Caspian Tandoori. Please pay on collection or delivery. We may contact you to confirm the order.";
+    content: "Thank you. Your order has been sent to Caspian Tandoori. Please pay on collection or delivery. The restaurant may contact you to confirm your order.";
     position: absolute;
-    left: 32px;
-    right: 32px;
-    top: 190px;
+    left: 24px;
+    right: 24px;
+    top: 130px;
     display: block;
-    border: 1px solid rgba(255, 91, 0, 0.28);
-    border-radius: 28px;
-    background: rgba(255, 91, 0, 0.12);
-    padding: 28px;
+    border: 1px solid rgba(255, 91, 0, 0.24);
+    border-radius: 22px;
+    background: rgba(255, 91, 0, 0.10);
+    padding: 20px;
     color: rgba(255, 255, 255, 0.82);
-    font-size: 1.05rem;
+    font-size: 0.98rem;
     font-weight: 700;
-    line-height: 1.7;
+    line-height: 1.55;
   }
 }
