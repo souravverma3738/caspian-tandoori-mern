@@ -20,6 +20,7 @@ function paymentMethodLabel(order) {
   if (method === "stripe") return "Stripe";
   if (method === "paypal") return "PayPal";
   if (method === "cash") return "Cash / pay in store";
+  if (method === "pay_later") return "Pay later";
   return method;
 }
 
@@ -33,8 +34,12 @@ function itemChoiceLines(item) {
   return lines;
 }
 
-function isPaidPendingOrder(order) {
-  return order?.status === "Pending" && order?.paymentStatus === "Paid";
+function shouldAlertForOrder(order) {
+  if (order?.status !== "Pending") return false;
+  if (order?.paymentStatus === "Paid") return true;
+
+  const method = order?.paymentMethod || order?.paymentProvider;
+  return method === "pay_later" || method === "cash";
 }
 
 function addressLines(order) {
@@ -105,7 +110,7 @@ export default function AdminOrderNotifier({ onViewDetails }) {
   async function fetchNewOrders() {
     try {
       const data = await adminApi.orders({ status: "Pending" });
-      const pending = data.filter(isPaidPendingOrder);
+      const pending = data.filter(shouldAlertForOrder);
 
       const fresh = pending
         .filter((order) => !initialisedRef.current || !knownIdsRef.current.has(order._id))
