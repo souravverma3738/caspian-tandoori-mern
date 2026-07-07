@@ -29,21 +29,46 @@ function publicUser(user) {
   };
 }
 
+function parseFirebaseServiceAccount() {
+  const projectId = process.env.FIREBASE_PROJECT_ID || "caspian-tandoori";
+
+  if (process.env.FIREBASE_SERVICE_ACCOUNT_BASE64) {
+    return JSON.parse(
+      Buffer.from(process.env.FIREBASE_SERVICE_ACCOUNT_BASE64, "base64").toString("utf8")
+    );
+  }
+
+  if (process.env.FIREBASE_SERVICE_ACCOUNT_JSON) {
+    return JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT_JSON);
+  }
+
+  if (process.env.FIREBASE_CLIENT_EMAIL && process.env.FIREBASE_PRIVATE_KEY) {
+    return {
+      project_id: projectId,
+      client_email: process.env.FIREBASE_CLIENT_EMAIL,
+      private_key: process.env.FIREBASE_PRIVATE_KEY.replace(/\\n/g, "\n"),
+    };
+  }
+
+  return null;
+}
+
 function initFirebaseAdmin() {
   if (getApps().length) return;
 
-  const serviceAccountJson = process.env.FIREBASE_SERVICE_ACCOUNT_JSON;
   const projectId = process.env.FIREBASE_PROJECT_ID || "caspian-tandoori";
+  const serviceAccount = parseFirebaseServiceAccount();
 
-  if (serviceAccountJson) {
-    initializeApp({
-      credential: cert(JSON.parse(serviceAccountJson)),
-      projectId,
-    });
-    return;
+  if (!serviceAccount) {
+    throw new Error(
+      "Firebase Admin is not configured. Add FIREBASE_SERVICE_ACCOUNT_JSON, FIREBASE_SERVICE_ACCOUNT_BASE64, or FIREBASE_CLIENT_EMAIL and FIREBASE_PRIVATE_KEY."
+    );
   }
 
-  initializeApp({ projectId });
+  initializeApp({
+    credential: cert(serviceAccount),
+    projectId,
+  });
 }
 
 async function verifyFirebaseIdToken(idToken) {
@@ -150,6 +175,13 @@ router.post("/google", async (req, res) => {
     res.json({ token, user: publicUser(user) });
   } catch (error) {
     console.error("[google signin] failed:", error);
+
+    if (String(error.message || "").includes("Firebase Admin is not configured")) {
+      return res.status(503).json({
+        message: "Google sign-in is not configured on the server. Please contact support.",
+      });
+    }
+
     res.status(401).json({ message: "Google sign-in could not be verified" });
   }
 });
