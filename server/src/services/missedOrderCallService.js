@@ -41,13 +41,22 @@ function buildCallMessage(order) {
 async function claimNextMissedOrder() {
   const delayMinutes = getPositiveNumber("ORDER_CALL_DELAY_MINUTES", 2);
   const cutoff = new Date(Date.now() - delayMinutes * 60 * 1000);
+  const now = new Date();
 
   return Order.findOneAndUpdate(
     {
       status: "Pending",
       createdAt: { $lte: cutoff },
-      ownerCallStatus: { $in: ["not_sent", "failed"] },
-      ...eligiblePaymentQuery(),
+      ownerCallStatus: "not_sent",
+      $and: [
+        eligiblePaymentQuery(),
+        {
+          $or: [
+            { scheduledFor: null },
+            { scheduledFor: { $lte: now } },
+          ],
+        },
+      ],
     },
     {
       $set: {
