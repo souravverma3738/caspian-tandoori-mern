@@ -15,8 +15,9 @@ import couponRoutes from "./routes/coupon.routes.js";
 import menuRoutes from "./routes/menu.routes.js";
 import RestaurantSettings from "./models/RestaurantSettings.js";
 import { getShopStatus, quoteDelivery } from "./utils/shop.js";
+import { startMissedOrderCallService } from "./services/missedOrderCallService.js";
 
-connectDB();
+connectDB().then(() => startMissedOrderCallService());
 
 const app = express();
 
