@@ -14,7 +14,8 @@
     "firebase-admin": "^14.0.0",
     "jsonwebtoken": "latest",
     "mongoose": "latest",
-    "stripe": "^22.1.0"
+    "stripe": "^22.1.0",
+    "twilio": "^5.10.4"
   },
   "devDependencies": {
     "nodemon": "latest"
